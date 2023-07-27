@@ -1,131 +1,122 @@
 import argparse
+import timeit
 import warnings
-from collections import OrderedDict
+
+import torch
+import torchvision
 
 import flwr as fl
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
-from torch.utils.data import DataLoader
-from torchvision.datasets import CIFAR10
-from torchvision.transforms import Compose, Normalize, ToTensor
-from tqdm import tqdm
-
+from flwr.common import (
+    EvaluateIns,
+    EvaluateRes,
+    FitIns,
+    FitRes,
+    NDArrays,
+    GetParametersRes,
+    GetParametersIns,
+    Status,
+    Code,
+)
 from model import Diffusion
 from copy import deepcopy
 from torchvision.datasets import ImageFolder
-from utils import ema_update, eval_loss, train_mode, eval_mode
+from data_utils import load_data
+from utils import ema_update, eval_mode, train_mode, train, test
 
 warnings.filterwarnings("ignore", category=UserWarning)
 DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
-def get_mean_std(dataset_id):
-    if (dataset_id == "cifar10"):
-        return [0.4914, 0.4822, 0.4465], [0.2470, 0.2435, 0.2616]
-    elif (dataset_id == "cifar100"):
-        return [0.5071, 0.4867, 0.4408], [0.2675, 0.2565, 0.2761]
-    elif (dataset_id == "cinic10"):
-        return [0.47889522, 0.47227842, 0.43047404], [0.24205776, 0.23828046, 0.25874835]
 
-def load_data(path, client_id):
-    """Load CIFAR-10 (training and test set)."""
-    mean, std = get_mean_std("cinic10")
-    transform = Compose([ToTensor(), Normalize(mean, std)])
-    trainset = ImageFolder(path + "/" + client_id + "/train", transform=transform)
-    testset = ImageFolder(path + "/" + client_id + "/test", transform=transform)
-    return trainset, testset
-    # trainset = CIFAR10("./data", train=True, download=True, transform=trf)
-    # testset = CIFAR10("./data", train=False, download=True, transform=trf)
-    # return DataLoader(trainset, batch_size=32, shuffle=True), DataLoader(testset)
+class DiffusionClient(fl.client.Client):
+    """Flower client implementing CIFAR-10 image classification using PyTorch."""
 
+    def __init__(
+        self,
+        cid: str,
+        model: Diffusion,
+        trainset: torchvision.datasets.folder.ImageFolder,
+        testset: torchvision.datasets.folder.ImageFolder,
+    ) -> None:
+        self.cid = cid
+        self.model = model
+        self.model_ema = deepcopy(model)
+        self.trainset = trainset
+        self.testset = testset
+        self.scaler = torch.cuda.amp.GradScaler()
 
-# #############################################################################
-# 2. Federation of the pipeline with Flower
-# #############################################################################
-
-model = Diffusion().to(DEVICE)
-model_ema = deepcopy(model)
-trainloader, testloader = load_data()
-scaler = torch.cuda.amp.GradScaler()
-seed = 0
-epoch = 0
-# Use a low discrepancy quasi-random sequence to sample uniformly distributed
-# timesteps. This considerably reduces the between-batch variance of the loss.
-rng = torch.quasirandom.SobolEngine(1, scramble=True)
-ema_decay = 0.998
-# The number of timesteps to use when sampling
-steps = 500
-# The amount of noise to add each timestep when sampling
-eta = 1.
-
-def train(model, model_ema, trainloader, epochs, device):
-    """Train the model on the training set."""
-    optimizer = torch.optim.Adam(model.parameters(), lr=2e-4)
-    for _ in range(epochs):        
-        epoch += 1
-        for reals,  classes in tqdm(trainloader):
-            optimizer.zero_grad()
-            reals = reals.to(DEVICE)
-            classes = classes.to(DEVICE)
-
-            # Evaluate the loss
-            loss = eval_loss(model, rng, reals, classes, DEVICE)
-
-            # Do the optimizer step and EMA update
-            scaler.scale(loss).backward()
-            scaler.step(optimizer)
-            ema_update(model, model_ema, 0.95 if epoch < 20 else ema_decay)
-            scaler.update()
-
-@torch.no_grad()
-@torch.random.fork_rng()
-@eval_mode(model_ema)
-def test(model_ema, testloader):
-    """Validate the model on the test set."""
-    torch.manual_seed(seed)
-    rng = torch.quasirandom.SobolEngine(1, scramble=True)
-    total_loss = 0
-    count = 0
-    for i, (reals, classes) in enumerate(tqdm(testloader)):
-        reals = reals.to(DEVICE)
-        classes = classes.to(DEVICE)
-
-        loss = eval_loss(model_ema, rng, reals, classes, DEVICE)
-
-        total_loss += loss.item() * len(reals)
-        count += len(reals)
-    loss = total_loss / count
-    return loss
+        # Training settings
+        self.seed = 0
+        self.epoch = 0
+        # Use a low discrepancy quasi-random sequence to sample uniformly distributed
+        # timesteps. This considerably reduces the between-batch variance of the loss.
+        self.rng = torch.quasirandom.SobolEngine(1, scramble=True)
+        self.ema_decay = 0.998
+        # The number of timesteps to use when sampling
+        self.steps = 500
+        # The amount of noise to add each timestep when sampling
+        self.eta = 1.
 
 
-# Define Flower client
-class FlowerClient(fl.client.NumPyClient):
-    def get_parameters(self, config):
-        return [val.cpu().numpy() for _, val in model_ema.state_dict().items()]
+    def get_parameters(self,  ins: GetParametersIns) -> GetParametersRes:
+        print(f"Client {self.cid}: get_parameters")
 
-    def set_parameters(self, parameters):
-        params_dict = zip(model.state_dict().keys(), parameters)
-        state_dict = OrderedDict({k: torch.tensor(v) for k, v in params_dict})
-        model.load_state_dict(state_dict, strict=True)
-        model_ema = deepcopy(model)
+        weights: NDArrays = self.model_ema.get_weights()
+        parameters = fl.common.ndarrays_to_parameters(weights)
+        return GetParametersRes(status=Status(code=Code.OK, message="Success"),
+                                parameters=parameters)
 
-    def fit(self, parameters, config):
-        self.set_parameters(parameters)
-        train(model, model_ema, trainloader, epochs=1)
-        return self.get_parameters(config={}), len(trainloader.dataset), {}
+    def fit(self, ins: FitIns) -> FitRes:
+        print(f"Client {self.cid}: fit")
 
-    def evaluate(self, parameters, config):
-        self.set_parameters(parameters)
-        loss = test(model_ema, testloader)
-        return loss, len(testloader.dataset)
+        weights: NDArrays = fl.common.parameters_to_ndarrays(ins.parameters)
+        config = ins.config
+        fit_begin = timeit.default_timer()
 
+        # Get training config
+        epochs = int(config["epochs"])
+        batch_size = int(config["batch_size"])
 
-# Start Flower client
-# fl.client.start_numpy_client(
-#     server_address="127.0.0.1:8080",
-#     client=FlowerClient(),
-# )
-train(model, model_ema, trainloader, epochs=1)
+        # Set model parameters
+        self.model.set_weights(weights)
+        self.model_ema.set_weights(weights)
+
+        # Train model
+        trainloader = torch.utils.data.DataLoader(
+            self.trainset, batch_size=batch_size, shuffle=True
+        )
+        train(self.model, self.model_ema, trainloader, epochs, self.epoch, self.rng, self.scaler, self.ema_decay, DEVICE)
+
+        # Return the refined weights and the number of examples used for training
+        weights_prime: NDArrays = self.model_ema.get_weights()
+        params_prime = fl.common.ndarrays_to_parameters(weights_prime)
+        num_examples_train = len(self.trainset)
+        metrics = {"duration": timeit.default_timer() - fit_begin}
+        return FitRes(
+            parameters=params_prime,
+            num_examples=num_examples_train,
+            metrics=metrics,
+            status=Status(code=Code.OK, message="Success"),
+        )
+
+    def evaluate(self, ins: EvaluateIns) -> EvaluateRes:
+        print(f"Client {self.cid}: evaluate")
+
+        weights = fl.common.parameters_to_ndarrays(ins.parameters)
+
+        # Use provided weights to update the local model
+        self.model.set_weights(weights)
+
+        # Evaluate the updated model on the local dataset
+        testloader = torch.utils.data.DataLoader(
+            self.testset, batch_size=100, shuffle=False
+        )
+        # loss = (eval_mode(self.model_ema))(test(self.model_ema, testloader, device=DEVICE))
+        loss = test(self.model_ema, testloader, device=DEVICE)
+        metrics = {"accuracy" : float(0)}
+        # Return the number of evaluation examples and the evaluation result (loss)
+        return EvaluateRes(
+            loss=loss, num_examples=len(self.testset), metrics=metrics, status=Status(code=Code.OK, message="Success")
+        )
 
 def main() -> None:
     """Load data, create and start CifarClient."""
@@ -133,11 +124,14 @@ def main() -> None:
     parser.add_argument(
         "--server_address",
         type=str,
-        default=DEFAULT_SERVER_ADDRESS,
-        help=f"gRPC server address (default: {DEFAULT_SERVER_ADDRESS})",
+        default="127.0.0.1:8080",
+        help=f"gRPC server address (default: 127.0.0.1:8080)",
     )
     parser.add_argument(
         "--cid", type=str, required=True, help="Client CID (no default)"
+    )
+    parser.add_argument(
+        "--dataset-path", type=str, required=True, help="Path to dataset (no default)"
     )
     parser.add_argument(
         "--log_host",
@@ -150,13 +144,15 @@ def main() -> None:
     fl.common.logger.configure(f"client_{args.cid}", host=args.log_host)
 
     # Load model and data
-    model = cifar.load_model()
-    model.to(DEVICE)
-    trainset, testset = cifar.load_data()
+    model = Diffusion().to(DEVICE)
+    # model_ema = deepcopy(model)
+    trainset, testset = load_data(args.dataset_path, args.cid)
 
     # Start client
-    client = CifarClient(args.cid, model, trainset, testset)
-    fl.client.start_client(args.server_address, client)
+    client = DiffusionClient(args.cid, model, trainset, testset)
+    fl.client.start_client(
+        server_address="127.0.0.1:8080",
+        client=client)
 
 
 if __name__ == "__main__":

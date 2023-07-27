@@ -6,16 +6,14 @@ import torchvision
 
 from data_utils import load_data
 from utils import test, eval_mode
-import model
+from model import load_model
 
 import flwr as fl
 
 
 
-# pylint: disable=no-member
-DEFAULT_SERVER_ADDRESS = "[::]:8080"
+
 DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-# pylint: enable=no-member
 
 
 def main() -> None:
@@ -24,8 +22,8 @@ def main() -> None:
     parser.add_argument(
         "--server_address",
         type=str,
-        default=DEFAULT_SERVER_ADDRESS,
-        help=f"gRPC server address (default: {DEFAULT_SERVER_ADDRESS})",
+        default="0.0.0.0:8080",
+        help=f"gRPC server address (default: 0.0.0.0:8080)",
     )
     parser.add_argument(
         "--rounds",
@@ -76,10 +74,9 @@ def main() -> None:
     # Configure logger and start server
     fl.common.logger.configure("server", host=args.log_host)
     fl.server.start_server(
-        args.server_address,
-        config={"num_rounds": args.rounds},
-        strategy=strategy,
-    )
+        server_address=args.server_address,
+        config=fl.server.ServerConfig(num_rounds=args.rounds),
+        strategy=strategy)
 
 
 def fit_config(server_round: int) -> Dict[str, fl.common.Scalar]:
@@ -97,13 +94,15 @@ def get_evaluate_fn(
 ) -> Callable[[fl.common.NDArray], Optional[Tuple[float, float]]]:
     """Return an evaluation function for centralized evaluation."""
 
-    def evaluate(weights: fl.common.NDArray) -> Optional[Tuple[float, float]]:
+    def evaluate(server_round, parameters: fl.common.NDArray, config) -> Optional[Tuple[float, float]]:
         """Use the entire CIFAR-10 test set for evaluation."""
-        model = model.load_model()
-        model.set_weights(weights)
+        model = load_model()
+        model.set_weights(parameters)
         model.to(DEVICE)
         testloader = torch.utils.data.DataLoader(testset, batch_size=100, shuffle=False)
-        return (eval_mode(model))(test(model, testloader, device=DEVICE))
+        loss = test(model, testloader, device=DEVICE)
+        metrics = {"accuracy" : float(0)}
+        return loss, metrics
 
     return evaluate
 

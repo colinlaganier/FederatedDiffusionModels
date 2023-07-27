@@ -1,33 +1,26 @@
 #!/bin/bash
 
-# Copyright 2020 Adap GmbH. All Rights Reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-# ==============================================================================
-
 set -e
 
 SERVER_ADDRESS="[::]:8080"
 NUM_CLIENTS=2
-DATA_PATH="data\cinic-10\federated\5"
+DATA_PATH="C:\Users\ColinLaganier\Documents\UCL\Dissertation\Testing\data\cinic-10\federated\5"
+
+python server.py --dataset-path $DATA_PATH &
+sleep 3  # Sleep for 3s to give the server enough time to start
 
 echo "Starting $NUM_CLIENTS clients."
 for ((i = 0; i < $NUM_CLIENTS; i++))
 do
-    echo "Starting client(cid=$i) with partition $i out of $NUM_CLIENTS clients."
-    python -m client \
-      --path=
-      --cid=$i \
-      --server_address=$SERVER_ADDRESS &
+    echo "Starting client $i"
+    python client.py \
+      --dataset-path $DATA_PATH \
+      --cid $i &
+    #   --server_address=$SERVER_ADDRESS &
 done
 echo "Started $NUM_CLIENTS clients."
+
+# Enable CTRL+C to stop all background processes
+trap "trap - SIGTERM && kill -- -$$" SIGINT SIGTERM
+# Wait for all background processes to complete
+wait
