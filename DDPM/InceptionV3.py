@@ -37,7 +37,7 @@ class InceptionV3(nn.Module):
 
         self.blocks = nn.ModuleList()
 
-        inception = models.inception_v3(weights=True)
+        inception = models.inception_v3(weights='Inception_V3_Weights.IMAGENET1K_V1')
 
         # Block 0: input to maxpool1
         block0 = [

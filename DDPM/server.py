@@ -1,6 +1,9 @@
 import argparse
-from typing import Callable, Dict, Optional, Tuple
+from typing import Callable, Dict, List, Optional, Tuple, Union
+from flwr.common import (Parameters, Scalar)
 
+import os 
+import time
 import torch
 import torchvision
 import flwr as fl
@@ -12,6 +15,26 @@ from model import load_model
 
 
 DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+
+class SaveModelStrategy(fl.server.strategy.FedAvg):
+    """Federated Averaging strategy with save model functionality."""
+    def aggregate_fit(
+        self,
+        server_round: int,
+        results: List[Tuple[fl.server.client_proxy.ClientProxy, fl.common.FitRes]],
+        failures: List[Union[Tuple[fl.server.client_proxy.ClientProxy, fl.common.FitRes], BaseException]],
+    ) -> Tuple[Optional[Parameters], Dict[str, Scalar]]:
+
+        # Call aggregate_fit from base class (FedAvg) to aggregate parameters and metrics
+        aggregated_parameters, aggregated_metrics = super().aggregate_fit(server_round, results, failures)
+
+        if aggregated_parameters is not None:
+            torch.save({
+            'round': server_round,
+            'state_dict': aggregated_parameters,
+            }, checkpoint_path + f"/model.pt")
+
+        return aggregated_parameters, aggregated_metrics
 
 
 def main() -> None:
@@ -55,16 +78,19 @@ def main() -> None:
     parser.add_argument(
         "--dataset-path", type=str, required=True, help="Path to dataset (no default)"
     )
+    parser.add_argument(
+        "--num-clients", type=int, required=True, help="Number of clients (no default)"
+    )
     args = parser.parse_args()
 
     # Load evaluation data
     _, testset = load_data(args.dataset_path, 0)
 
     # Create strategy
-    strategy = fl.server.strategy.FedAvg(
+    strategy = SaveModelStrategy(
         fraction_fit=args.sample_fraction,
-        min_fit_clients=args.min_sample_size,
-        min_available_clients=args.min_num_clients,
+        min_fit_clients=args.num_clients,
+        min_available_clients=args.num_clients,
         evaluate_fn=get_evaluate_fn(testset),
         on_fit_config_fn=fit_config,
     )
@@ -122,4 +148,7 @@ def get_evaluate_fn(
 
 
 if __name__ == "__main__":
+    global checkpoint_path
+    checkpoint_path = "../checkpoints/" + time.strftime("%Y%m%d-%H%M%S")
+    os.makedirs(f"{checkpoint_path}", exist_ok=True)
     main()
