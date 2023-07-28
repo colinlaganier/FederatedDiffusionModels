@@ -44,7 +44,7 @@ done
 
 set -e
 
-python server.py --dataset-path $data_path &
+python server.py --dataset-path $data_path --num-clients $num_clients&
 sleep 3  # Sleep for 3s to give the server enough time to start
 
 echo "Starting $num_clients clients."
