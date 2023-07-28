@@ -8,10 +8,12 @@ import torch
 import torchvision
 import flwr as fl
 import random
+from collections import OrderedDict
 from FIDScorer import FIDScorer
 from data_utils import load_data
 from utils import test, eval_mode, sample
 from model import load_model
+import numpy as np
 
 
 DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -28,11 +30,15 @@ class SaveModelStrategy(fl.server.strategy.FedAvg):
         # Call aggregate_fit from base class (FedAvg) to aggregate parameters and metrics
         aggregated_parameters, aggregated_metrics = super().aggregate_fit(server_round, results, failures)
 
+
+        # Save the model
         if aggregated_parameters is not None:
-            torch.save({
-            'round': server_round,
-            'state_dict': aggregated_parameters,
-            }, checkpoint_path + f"/model.pt")
+            model = load_model()
+            aggregated_ndarrays: List[np.ndarray] = fl.common.parameters_to_ndarrays(aggregated_parameters)
+            params_dict = zip(model.state_dict().keys(), aggregated_ndarrays)
+            state_dict = OrderedDict({k: torch.tensor(v) for k, v in params_dict})
+            model.load_state_dict(state_dict, strict=True)
+            torch.save(model.state_dict(), checkpoint_path + f"/model.pth")
 
         return aggregated_parameters, aggregated_metrics
 
@@ -125,7 +131,8 @@ def get_evaluate_fn(
         model.set_weights(parameters)
         model.to(DEVICE)
         testloader = torch.utils.data.DataLoader(testset, batch_size=100, shuffle=False)
-        loss = test(model, testloader, device=DEVICE)
+        # loss = test(model, testloader, device=DEVICE)
+        loss = 0
         real_num = len(testset)
         num_samples = 2500
         steps = 500
