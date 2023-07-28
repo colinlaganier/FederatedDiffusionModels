@@ -3,14 +3,12 @@ from typing import Callable, Dict, Optional, Tuple
 
 import torch
 import torchvision
-
-from data_utils import load_data
-from utils import test, eval_mode
-from model import load_model
-
 import flwr as fl
-
-
+import random
+from FIDScorer import FIDScorer
+from data_utils import load_data
+from utils import test, eval_mode, sample
+from model import load_model
 
 
 DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -70,6 +68,7 @@ def main() -> None:
         evaluate_fn=get_evaluate_fn(testset),
         on_fit_config_fn=fit_config,
     )
+    
 
     # Configure logger and start server
     fl.common.logger.configure("server", host=args.log_host)
@@ -101,7 +100,22 @@ def get_evaluate_fn(
         model.to(DEVICE)
         testloader = torch.utils.data.DataLoader(testset, batch_size=100, shuffle=False)
         loss = test(model, testloader, device=DEVICE)
-        metrics = {"accuracy" : float(0)}
+        real_num = len(testset)
+        num_samples = 2500
+        steps = 500
+        eta = 1.
+        
+        # Generate fake images
+        noise = torch.randn([num_samples, 3, 32, 32], device=DEVICE)
+        fakes_classes = torch.arange(10, device=DEVICE).repeat_interleave(250, 0)
+        fakes = sample(model, noise, steps, eta, fakes_classes)
+        
+        subset = torch.utils.data.Subset(testset, random.sample(range(real_num), min(num_samples, real_num)))
+        real_loader = torch.utils.data.DataLoader(subset, batch_size=100)
+        fake_loader = torch.utils.data.DataLoader(torch.utils.data.TensorDataset(fakes, fakes_classes), batch_size=100)
+        fid = FIDScorer().calculate_fid(real_loader, fake_loader, device=DEVICE)
+
+        metrics = {"fid" : float(fid)}
         return loss, metrics
 
     return evaluate

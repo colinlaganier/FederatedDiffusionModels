@@ -43,7 +43,6 @@ class DiffusionClient(fl.client.Client):
         self.trainset = trainset
         self.testset = testset
         self.scaler = torch.cuda.amp.GradScaler()
-
         # Training settings
         self.seed = 0
         self.epoch = 0
@@ -112,7 +111,7 @@ class DiffusionClient(fl.client.Client):
         )
         # loss = (eval_mode(self.model_ema))(test(self.model_ema, testloader, device=DEVICE))
         loss = test(self.model_ema, testloader, device=DEVICE)
-        metrics = {"accuracy" : float(0)}
+        metrics = {}
         # Return the number of evaluation examples and the evaluation result (loss)
         return EvaluateRes(
             loss=loss, num_examples=len(self.testset), metrics=metrics, status=Status(code=Code.OK, message="Success")
