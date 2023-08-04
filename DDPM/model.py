@@ -4,8 +4,6 @@ import math
 import flwr as fl
 from collections import OrderedDict
 
-# Define the model (a residual U-Net)
-
 class ResidualBlock(nn.Module):
     def __init__(self, main, skip=None):
         super().__init__()

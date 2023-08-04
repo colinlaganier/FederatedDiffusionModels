@@ -119,7 +119,7 @@ def train(model, model_ema, trainloader, num_epoch, curr_epoch, rng, scaler, ema
     """Train the model on the training set."""
     optimizer = torch.optim.Adam(model.parameters(), lr=2e-4)
     for _ in range(num_epoch):        
-        epoch += 1
+        curr_epoch += 1
         for reals,  classes in tqdm(trainloader):
             optimizer.zero_grad()
             reals = reals.to(device)
@@ -140,6 +140,7 @@ def train(model, model_ema, trainloader, num_epoch, curr_epoch, rng, scaler, ema
 def test(model, testloader, device):
     """Validate the model on the test set."""
     torch.manual_seed(42)
+    eval_mode(model)
     rng = torch.quasirandom.SobolEngine(1, scramble=True)
     total_loss = 0
     count = 0
@@ -152,5 +153,6 @@ def test(model, testloader, device):
         total_loss += loss.item() * len(reals)
         count += len(reals)
     loss = total_loss / count
+    train_mode(model)
     return loss
 

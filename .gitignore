@@ -1,4 +1,10 @@
 /dataset/
+/checkpoints/*
+!checkpoints/README.md
+# Tensorboard event files
+/runs/*
+!runs/README.md
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
