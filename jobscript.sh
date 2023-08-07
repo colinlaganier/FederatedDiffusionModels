@@ -16,7 +16,7 @@
 #$ -l tmpfs=32G
 
 # Set the name of the job.
-#$ -N DDPM_Fed_5
+#$ -N DDPM_Fed_10_100
 
 # Set the working directory to somewhere in your scratch space.
 # Replace "<your_UCL_id>" with your UCL user ID :)
@@ -39,4 +39,4 @@ conda activate FedKDD
 # Run the application - the line below is just a random example.
 nvidia-smi
 
-sh DDPM/run.sh -c 5 -r 100
+sh DDPM/run.sh -c 5 -r 10 -e 100

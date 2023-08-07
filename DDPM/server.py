@@ -14,6 +14,7 @@ from data_utils import load_data
 from utils import test, eval_mode, sample
 from model import load_model
 import numpy as np
+from torch.utils.tensorboard import SummaryWriter
 
 
 DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -152,6 +153,7 @@ def get_evaluate_fn(
         real_loader = torch.utils.data.DataLoader(subset, batch_size=100)
         fake_loader = torch.utils.data.DataLoader(torch.utils.data.TensorDataset(fakes, fakes_classes), batch_size=100)
         fid = FIDScorer().calculate_fid(real_loader, fake_loader, device=DEVICE)
+        logger.add_scalar("fid", fid, server_round)
 
         metrics = {"fid" : float(fid)}
         return loss, metrics
@@ -160,7 +162,11 @@ def get_evaluate_fn(
 
 
 if __name__ == "__main__":
-    global checkpoint_path
+    global checkpoint_path, logger
+    # Create checkpoint directory
     checkpoint_path = "../checkpoints/" + time.strftime("%Y%m%d-%H%M%S")
     os.makedirs(f"{checkpoint_path}", exist_ok=True)
+    # Create tensorboard writer
+    logger = SummaryWriter()
+    
     main()
