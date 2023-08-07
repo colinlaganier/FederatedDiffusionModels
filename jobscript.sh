@@ -18,8 +18,7 @@
 # Set the name of the job.
 #$ -N DDPM_Fed_10_100
 
-# Set the working directory to somewhere in your scratch space.
-# Replace "<your_UCL_id>" with your UCL user ID :)
+# Set the working directory to somewhere in your scratch space
 #$ -wd /home/ucabcuf/Scratch/FederatedDiffusionModels
 
 # Change into temporary directory to run work
@@ -36,7 +35,7 @@ module load python/miniconda3/4.10.3
 source $UCL_CONDA_PATH/etc/profile.d/conda.sh
 conda activate FedKDD
 
-# Run the application - the line below is just a random example.
+# Run the application
 nvidia-smi
-
-sh DDPM/run.sh -c 5 -r 10 -e 100
+cd DDPM
+sh run.sh -c 5 -r 10 -e 100 -d ../dataset/cinic-10/Federated/5
