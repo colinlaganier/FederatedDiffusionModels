@@ -45,6 +45,7 @@ class SaveModelStrategy(fl.server.strategy.FedAvg):
 
 def main() -> None:
     """Start server and train five rounds."""
+    global num_epochs
     parser = argparse.ArgumentParser(description="Flower")
     parser.add_argument(
         "--server_address",
@@ -87,7 +88,11 @@ def main() -> None:
     parser.add_argument(
         "--num-clients", type=int, required=True, help="Number of clients (no default)"
     )
+    parser.add_argument(
+        "--epochs", type=int, default=1, help="Number of epochs (default: 1)",
+    )
     args = parser.parse_args()
+    num_epochs = args.epochs
 
     # Load evaluation data
     _, testset = load_data(args.dataset_path, 0)
@@ -114,8 +119,8 @@ def fit_config(server_round: int) -> Dict[str, fl.common.Scalar]:
     """Return a configuration with static batch size and (local) epochs."""
     config: Dict[str, fl.common.Scalar] = {
         "epoch_global": str(server_round),
-        "epochs": str(1),
-        "batch_size": str(100),
+        "epochs": str(num_epochs),
+        "batch_size": str(128),
     }
     return config
 
@@ -134,7 +139,7 @@ def get_evaluate_fn(
         # loss = test(model, testloader, device=DEVICE)
         loss = 0
         real_num = len(testset)
-        num_samples = 2500
+        num_samples = 10000
         steps = 500
         eta = 1.
         
