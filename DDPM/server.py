@@ -140,7 +140,7 @@ def get_evaluate_fn(
         # loss = test(model, testloader, device=DEVICE)
         loss = 0
         real_num = len(testset)
-        num_samples = 10000
+        num_samples = 2500
         steps = 500
         eta = 1.
         
