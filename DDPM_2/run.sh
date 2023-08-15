@@ -65,3 +65,5 @@ echo "Started $num_clients clients."
 trap "trap - SIGTERM && kill -- -$$" SIGINT SIGTERM
 # Wait for all background processes to complete
 wait
+sh run.sh c /home/ec2-user/FedKDD/dataset/cinic-10/5
+sh run.sh -c 2 -r 1 -e 1 -d /home/ec2-user/FedKDD/dataset/cinic-10/5

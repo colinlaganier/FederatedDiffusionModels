@@ -9,16 +9,14 @@ import torchvision
 import flwr as fl
 import random
 from collections import OrderedDict
-from FIDScorer import FIDScorer
-from data_utils import load_data
-# from utils import test, eval_mode, sample
-from model import load_model
 import numpy as np
 from torch.utils.tensorboard import SummaryWriter
 
 from config import modelConfig
 from DiffusionCondition import GaussianDiffusionSampler, GaussianDiffusionTrainer
-from ModelCondition import UNet
+from FIDScorer import FIDScorer
+from data_utils import load_data
+from model import load_model
 
 DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
@@ -36,7 +34,7 @@ class SaveModelStrategy(fl.server.strategy.FedAvg):
 
         # Save the model
         if aggregated_parameters is not None:
-            model = load_model()
+            model = load_model(modelConfig)
             aggregated_ndarrays: List[np.ndarray] = fl.common.parameters_to_ndarrays(aggregated_parameters)
             params_dict = zip(model.state_dict().keys(), aggregated_ndarrays)
             state_dict = OrderedDict({k: torch.tensor(v) for k, v in params_dict})
@@ -53,7 +51,7 @@ def main() -> None:
     parser.add_argument(
         "--server_address",
         type=str,
-        default="0.0.0.0:9090",
+        default="0.0.0.0:8080",
         help=f"gRPC server address (default: 0.0.0.0:8080)",
     )
     parser.add_argument(
@@ -105,7 +103,7 @@ def main() -> None:
         fraction_fit=args.sample_fraction,
         min_fit_clients=args.num_clients,
         min_available_clients=args.num_clients,
-        evaluate_fn=get_evaluate_fn(testset, modelConfig),
+        evaluate_fn=get_evaluate_fn(testset),
         on_fit_config_fn=fit_config,
     )
     
@@ -126,43 +124,45 @@ def fit_config(server_round: int) -> Dict[str, fl.common.Scalar]:
     }
     return config
 
-
 def get_evaluate_fn(
     testset: torchvision.datasets.folder.ImageFolder,
-    modelConfig: Dict,
 ) -> Callable[[fl.common.NDArray], Optional[Tuple[float, float]]]:
     """Return an evaluation function for centralized evaluation."""
 
-    def evaluate(server_round, parameters: fl.common.NDArray, config) -> Optional[Tuple[float, float]]:
+    def evaluate(server_round, weights: fl.common.NDArray, config) -> Optional[Tuple[float, float]]:
         """Use the entire CIFAR-10 test set for evaluation."""
-        model = UNet(T=modelConfig["T"], num_labels=10, ch=modelConfig["channel"], ch_mult=modelConfig["channel_mult"],
-                    num_res_blocks=modelConfig["num_res_blocks"], dropout=modelConfig["dropout"]).to(DEVICE)
-        model.set_weights(parameters)
+        # Load model and set weights
+        model = load_model(modelConfig)
+        model.set_weights(weights)
         model.to(DEVICE)
+        model.eval()
         
         loss = 0
         real_num = len(testset)
-        num_samples = 200
+        num_samples = 1000
+        num_batches = 5
+        batch_size = num_samples // num_batches
         
         with torch.no_grad():
             # Generate fake labels
 
             # Store fake images generated
             fakes = [] 
+            fakes_classes = torch.arange(1,11).repeat_interleave(num_samples // 10, 0).to(DEVICE)
 
-            for _ in range(1):
-                fakes_classes = torch.arange(1,11).repeat_interleave(20, 0).to(DEVICE)
-                
+            for idx in range(num_batches):
                 sampler = GaussianDiffusionSampler(
                     model, modelConfig["beta_1"], modelConfig["beta_T"], modelConfig["T"], w=modelConfig["w"]).to(DEVICE)
                 # Sampled from standard normal distribution
                 noise = torch.randn(
-                    size=[200, 3, modelConfig["img_size"], modelConfig["img_size"]], device=DEVICE)
-                fakes_batch = sampler(noise, fakes_classes)
+                    size=[batch_size, 3, modelConfig["img_size"], modelConfig["img_size"]], device=DEVICE)
+                fakes_batch = sampler(noise, fakes_classes[idx * batch_size : (idx + 1) * batch_size])
                 fakes_batch = fakes_batch * 0.5 + 0.5  # [0 ~ 1]
                 fakes.append(fakes_batch)
             
-            fakes = torch.cat(fakes, dim=1)
+            fakes = torch.cat(fakes, dim=0)
+            print(fakes.shape)
+            print(fakes_classes.shape)
 
             subset = torch.utils.data.Subset(testset, random.sample(range(real_num), min(num_samples, real_num)))
             real_loader = torch.utils.data.DataLoader(subset, batch_size=100)

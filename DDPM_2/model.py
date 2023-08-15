@@ -1,102 +1,229 @@
-import torch
-import torch.nn as nn
 import math
+from telnetlib import PRAGMA_HEARTBEAT
+import torch
+from torch import nn
+from torch.nn import init
+from torch.nn import functional as F
 import flwr as fl
 from collections import OrderedDict
 
-class ResidualBlock(nn.Module):
-    def __init__(self, main, skip=None):
+def drop_connect(x, drop_ratio):
+    keep_ratio = 1.0 - drop_ratio
+    mask = torch.empty([x.shape[0], 1, 1, 1], dtype=x.dtype, device=x.device)
+    mask.bernoulli_(p=keep_ratio)
+    x.div_(keep_ratio)
+    x.mul_(mask)
+    return x
+
+class Swish(nn.Module):
+    def forward(self, x):
+        return x * torch.sigmoid(x)
+
+
+class TimeEmbedding(nn.Module):
+    def __init__(self, T, d_model, dim):
+        assert d_model % 2 == 0
         super().__init__()
-        self.main = nn.Sequential(*main)
-        self.skip = skip if skip else nn.Identity()
+        emb = torch.arange(0, d_model, step=2) / d_model * math.log(10000)
+        emb = torch.exp(-emb)
+        pos = torch.arange(T).float()
+        emb = pos[:, None] * emb[None, :]
+        assert list(emb.shape) == [T, d_model // 2]
+        emb = torch.stack([torch.sin(emb), torch.cos(emb)], dim=-1)
+        assert list(emb.shape) == [T, d_model // 2, 2]
+        emb = emb.view(T, d_model)
 
-    def forward(self, input):
-        return self.main(input) + self.skip(input)
-
-
-class ResConvBlock(ResidualBlock):
-    def __init__(self, c_in, c_mid, c_out, dropout_last=True):
-        skip = None if c_in == c_out else nn.Conv2d(c_in, c_out, 1, bias=False)
-        super().__init__([
-            nn.Conv2d(c_in, c_mid, 3, padding=1),
-            nn.Dropout2d(0.1, inplace=True),
-            nn.ReLU(inplace=True),
-            nn.Conv2d(c_mid, c_out, 3, padding=1),
-            nn.Dropout2d(0.1, inplace=True) if dropout_last else nn.Identity(),
-            nn.ReLU(inplace=True),
-        ], skip)
-
-
-class SkipBlock(nn.Module):
-    def __init__(self, main, skip=None):
-        super().__init__()
-        self.main = nn.Sequential(*main)
-        self.skip = skip if skip else nn.Identity()
-
-    def forward(self, input):
-        return torch.cat([self.main(input), self.skip(input)], dim=1)
-
-
-class FourierFeatures(nn.Module):
-    def __init__(self, in_features, out_features, std=1.):
-        super().__init__()
-        assert out_features % 2 == 0
-        self.weight = nn.Parameter(torch.randn([out_features // 2, in_features]) * std)
-
-    def forward(self, input):
-        f = 2 * math.pi * input @ self.weight.T
-        return torch.cat([f.cos(), f.sin()], dim=-1)
-
-
-def expand_to_planes(input, shape):
-    return input[..., None, None].repeat([1, 1, shape[2], shape[3]])
-
-
-class Diffusion(nn.Module):
-    def __init__(self):
-        super().__init__()
-        c = 64  # The base channel count
-
-        # The inputs to timestep_embed will approximately fall into the range
-        # -10 to 10, so use std 0.2 for the Fourier Features.
-        self.timestep_embed = FourierFeatures(1, 16, std=0.2)
-        self.class_embed = nn.Embedding(10, 4)
-
-        self.net = nn.Sequential(   # 32x32
-            ResConvBlock(3 + 16 + 4, c, c),
-            ResConvBlock(c, c, c),
-            SkipBlock([
-                nn.AvgPool2d(2),  # 32x32 -> 16x16
-                ResConvBlock(c, c * 2, c * 2),
-                ResConvBlock(c * 2, c * 2, c * 2),
-                SkipBlock([
-                    nn.AvgPool2d(2),  # 16x16 -> 8x8
-                    ResConvBlock(c * 2, c * 4, c * 4),
-                    ResConvBlock(c * 4, c * 4, c * 4),
-                    SkipBlock([
-                        nn.AvgPool2d(2),  # 8x8 -> 4x4
-                        ResConvBlock(c * 4, c * 8, c * 8),
-                        ResConvBlock(c * 8, c * 8, c * 8),
-                        ResConvBlock(c * 8, c * 8, c * 8),
-                        ResConvBlock(c * 8, c * 8, c * 4),
-                        nn.Upsample(scale_factor=2),
-                    ]),  # 4x4 -> 8x8
-                    ResConvBlock(c * 8, c * 4, c * 4),
-                    ResConvBlock(c * 4, c * 4, c * 2),
-                    nn.Upsample(scale_factor=2),
-                ]),  # 8x8 -> 16x16
-                ResConvBlock(c * 4, c * 2, c * 2),
-                ResConvBlock(c * 2, c * 2, c),
-                nn.Upsample(scale_factor=2),
-            ]),  # 16x16 -> 32x32
-            ResConvBlock(c * 2, c, c),
-            ResConvBlock(c, c, 3, dropout_last=False),
+        self.timembedding = nn.Sequential(
+            nn.Embedding.from_pretrained(emb, freeze=False),
+            nn.Linear(d_model, dim),
+            Swish(),
+            nn.Linear(dim, dim),
         )
 
-    def forward(self, input, log_snrs, cond):
-        timestep_embed = expand_to_planes(self.timestep_embed(log_snrs[:, None]), input.shape)
-        class_embed = expand_to_planes(self.class_embed(cond), input.shape)
-        return self.net(torch.cat([input, class_embed, timestep_embed], dim=1))
+    def forward(self, t):
+        emb = self.timembedding(t)
+        return emb
+
+
+class ConditionalEmbedding(nn.Module):
+    def __init__(self, num_labels, d_model, dim):
+        assert d_model % 2 == 0
+        super().__init__()
+        self.condEmbedding = nn.Sequential(
+            nn.Embedding(num_embeddings=num_labels + 1, embedding_dim=d_model, padding_idx=0),
+            nn.Linear(d_model, dim),
+            Swish(),
+            nn.Linear(dim, dim),
+        )
+
+    def forward(self, t):
+        emb = self.condEmbedding(t)
+        return emb
+
+
+class DownSample(nn.Module):
+    def __init__(self, in_ch):
+        super().__init__()
+        self.c1 = nn.Conv2d(in_ch, in_ch, 3, stride=2, padding=1)
+        self.c2 = nn.Conv2d(in_ch, in_ch, 5, stride=2, padding=2)
+
+    def forward(self, x, temb, cemb):
+        x = self.c1(x) + self.c2(x)
+        return x
+
+
+class UpSample(nn.Module):
+    def __init__(self, in_ch):
+        super().__init__()
+        self.c = nn.Conv2d(in_ch, in_ch, 3, stride=1, padding=1)
+        self.t = nn.ConvTranspose2d(in_ch, in_ch, 5, 2, 2, 1)
+
+    def forward(self, x, temb, cemb):
+        _, _, H, W = x.shape
+        x = self.t(x)
+        x = self.c(x)
+        return x
+
+
+class AttnBlock(nn.Module):
+    def __init__(self, in_ch):
+        super().__init__()
+        self.group_norm = nn.GroupNorm(32, in_ch)
+        self.proj_q = nn.Conv2d(in_ch, in_ch, 1, stride=1, padding=0)
+        self.proj_k = nn.Conv2d(in_ch, in_ch, 1, stride=1, padding=0)
+        self.proj_v = nn.Conv2d(in_ch, in_ch, 1, stride=1, padding=0)
+        self.proj = nn.Conv2d(in_ch, in_ch, 1, stride=1, padding=0)
+
+    def forward(self, x):
+        B, C, H, W = x.shape
+        h = self.group_norm(x)
+        q = self.proj_q(h)
+        k = self.proj_k(h)
+        v = self.proj_v(h)
+
+        q = q.permute(0, 2, 3, 1).view(B, H * W, C)
+        k = k.view(B, C, H * W)
+        w = torch.bmm(q, k) * (int(C) ** (-0.5))
+        assert list(w.shape) == [B, H * W, H * W]
+        w = F.softmax(w, dim=-1)
+
+        v = v.permute(0, 2, 3, 1).view(B, H * W, C)
+        h = torch.bmm(w, v)
+        assert list(h.shape) == [B, H * W, C]
+        h = h.view(B, H, W, C).permute(0, 3, 1, 2)
+        h = self.proj(h)
+
+        return x + h
+
+
+
+class ResBlock(nn.Module):
+    def __init__(self, in_ch, out_ch, tdim, dropout, attn=True):
+        super().__init__()
+        self.block1 = nn.Sequential(
+            nn.GroupNorm(32, in_ch),
+            Swish(),
+            nn.Conv2d(in_ch, out_ch, 3, stride=1, padding=1),
+        )
+        self.temb_proj = nn.Sequential(
+            Swish(),
+            nn.Linear(tdim, out_ch),
+        )
+        self.cond_proj = nn.Sequential(
+            Swish(),
+            nn.Linear(tdim, out_ch),
+        )
+        self.block2 = nn.Sequential(
+            nn.GroupNorm(32, out_ch),
+            Swish(),
+            nn.Dropout(dropout),
+            nn.Conv2d(out_ch, out_ch, 3, stride=1, padding=1),
+        )
+        if in_ch != out_ch:
+            self.shortcut = nn.Conv2d(in_ch, out_ch, 1, stride=1, padding=0)
+        else:
+            self.shortcut = nn.Identity()
+        if attn:
+            self.attn = AttnBlock(out_ch)
+        else:
+            self.attn = nn.Identity()
+
+
+    def forward(self, x, temb, labels):
+        h = self.block1(x)
+        h += self.temb_proj(temb)[:, :, None, None]
+        h += self.cond_proj(labels)[:, :, None, None]
+        h = self.block2(h)
+
+        h = h + self.shortcut(x)
+        h = self.attn(h)
+        return h
+
+
+class UNet(nn.Module):
+    def __init__(self, T, num_labels, ch, ch_mult, num_res_blocks, dropout):
+        super().__init__()
+        tdim = ch * 4
+        self.time_embedding = TimeEmbedding(T, ch, tdim)
+        self.cond_embedding = ConditionalEmbedding(num_labels, ch, tdim)
+        self.head = nn.Conv2d(3, ch, kernel_size=3, stride=1, padding=1)
+        self.downblocks = nn.ModuleList()
+        chs = [ch]  # record output channel when dowmsample for upsample
+        now_ch = ch
+        for i, mult in enumerate(ch_mult):
+            out_ch = ch * mult
+            for _ in range(num_res_blocks):
+                self.downblocks.append(ResBlock(in_ch=now_ch, out_ch=out_ch, tdim=tdim, dropout=dropout))
+                now_ch = out_ch
+                chs.append(now_ch)
+            if i != len(ch_mult) - 1:
+                self.downblocks.append(DownSample(now_ch))
+                chs.append(now_ch)
+
+        self.middleblocks = nn.ModuleList([
+            ResBlock(now_ch, now_ch, tdim, dropout, attn=True),
+            ResBlock(now_ch, now_ch, tdim, dropout, attn=False),
+        ])
+
+        self.upblocks = nn.ModuleList()
+        for i, mult in reversed(list(enumerate(ch_mult))):
+            out_ch = ch * mult
+            for _ in range(num_res_blocks + 1):
+                self.upblocks.append(ResBlock(in_ch=chs.pop() + now_ch, out_ch=out_ch, tdim=tdim, dropout=dropout, attn=False))
+                now_ch = out_ch
+            if i != 0:
+                self.upblocks.append(UpSample(now_ch))
+        assert len(chs) == 0
+
+        self.tail = nn.Sequential(
+            nn.GroupNorm(32, now_ch),
+            Swish(),
+            nn.Conv2d(now_ch, 3, 3, stride=1, padding=1)
+        )
+ 
+
+    def forward(self, x, t, labels):
+        # Timestep embedding
+        temb = self.time_embedding(t)
+        cemb = self.cond_embedding(labels)
+        # Downsampling
+        h = self.head(x)
+        hs = [h]
+        for layer in self.downblocks:
+            h = layer(h, temb, cemb)
+            hs.append(h)
+        # Middle
+        for layer in self.middleblocks:
+            h = layer(h, temb, cemb)
+        # Upsampling
+        for layer in self.upblocks:
+            if isinstance(layer, ResBlock):
+                h = torch.cat([h, hs.pop()], dim=1)
+            h = layer(h, temb, cemb)
+        h = self.tail(h)
+
+        assert len(hs) == 0
+        return h
     
     def get_weights(self) -> fl.common.NDArray:
         """Get model weights as a list of NumPy ndarrays."""
@@ -108,7 +235,8 @@ class Diffusion(nn.Module):
             {k: torch.tensor(v) for k, v in zip(self.state_dict().keys(), weights)}
         )
         self.load_state_dict(state_dict, strict=True)
-
-def load_model() -> Diffusion:
+    
+def load_model(modelConfig) -> UNet:
     """Load diffusion model."""
-    return Diffusion()
+    return UNet(T=modelConfig["T"], num_labels=10, ch=modelConfig["channel"], ch_mult=modelConfig["channel_mult"],
+                num_res_blocks=modelConfig["num_res_blocks"], dropout=modelConfig["dropout"])

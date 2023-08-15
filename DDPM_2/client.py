@@ -7,7 +7,6 @@ import torch
 import torchvision
 import torch.optim as optim
 
-
 import flwr as fl
 from flwr.common import (
     EvaluateIns,
@@ -20,20 +19,16 @@ from flwr.common import (
     Status,
     Code,
 )
-# from model import Diffusion
-# from copy import deepcopy
-from torchvision.datasets import ImageFolder
+
 from data_utils import load_data
 from utils import train
-
 from DiffusionCondition import GaussianDiffusionSampler, GaussianDiffusionTrainer
-from ModelCondition import UNet, load_model
+from model import load_model
 from Scheduler import GradualWarmupScheduler
 from config import modelConfig
 
 warnings.filterwarnings("ignore", category=UserWarning)
 DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-
 
 class DiffusionClient(fl.client.Client):
     """Flower client implementing CIFAR-10 image classification using PyTorch."""
@@ -164,7 +159,7 @@ def main() -> None:
     # Start client
     client = DiffusionClient(args.cid, trainset, testset)
     fl.client.start_client(
-        server_address="127.0.0.1:9090",
+        server_address="127.0.0.1:8080",
         client=client)
 
 
