@@ -142,36 +142,39 @@ def get_evaluate_fn(
         num_samples = 1000
         num_batches = 5
         batch_size = num_samples // num_batches
-        
-        with torch.no_grad():
-            # Generate fake labels
+        if server_round % 5 == 0:
+            with torch.no_grad():
+                # Generate fake labels
 
-            # Store fake images generated
-            fakes = [] 
-            fakes_classes = torch.arange(1,11).repeat_interleave(num_samples // 10, 0).to(DEVICE)
+                # Store fake images generated
+                fakes = [] 
+                fakes_classes = torch.arange(1,11).repeat_interleave(num_samples // 10, 0).to(DEVICE)
 
-            for idx in range(num_batches):
-                sampler = GaussianDiffusionSampler(
-                    model, modelConfig["beta_1"], modelConfig["beta_T"], modelConfig["T"], w=modelConfig["w"]).to(DEVICE)
-                # Sampled from standard normal distribution
-                noise = torch.randn(
-                    size=[batch_size, 3, modelConfig["img_size"], modelConfig["img_size"]], device=DEVICE)
-                fakes_batch = sampler(noise, fakes_classes[idx * batch_size : (idx + 1) * batch_size])
-                fakes_batch = fakes_batch * 0.5 + 0.5  # [0 ~ 1]
-                fakes.append(fakes_batch)
-            
-            fakes = torch.cat(fakes, dim=0)
-            print(fakes.shape)
-            print(fakes_classes.shape)
+                for idx in range(num_batches):
+                    sampler = GaussianDiffusionSampler(
+                        model, modelConfig["beta_1"], modelConfig["beta_T"], modelConfig["T"], w=modelConfig["w"]).to(DEVICE)
+                    # Sampled from standard normal distribution
+                    noise = torch.randn(
+                        size=[batch_size, 3, modelConfig["img_size"], modelConfig["img_size"]], device=DEVICE)
+                    fakes_batch = sampler(noise, fakes_classes[idx * batch_size : (idx + 1) * batch_size])
+                    fakes_batch = fakes_batch * 0.5 + 0.5  # [0 ~ 1]
+                    fakes.append(fakes_batch)
+                
+                fakes = torch.cat(fakes, dim=0)
+                print(fakes.shape)
+                print(fakes_classes.shape)
 
-            subset = torch.utils.data.Subset(testset, random.sample(range(real_num), min(num_samples, real_num)))
-            real_loader = torch.utils.data.DataLoader(subset, batch_size=100)
-            fake_loader = torch.utils.data.DataLoader(torch.utils.data.TensorDataset(fakes, fakes_classes), batch_size=100)
-            fid = FIDScorer().calculate_fid(real_loader, fake_loader, device=DEVICE)
-            logger.add_scalar("fid", fid, server_round)
+                subset = torch.utils.data.Subset(testset, random.sample(range(real_num), min(num_samples, real_num)))
+                real_loader = torch.utils.data.DataLoader(subset, batch_size=100)
+                fake_loader = torch.utils.data.DataLoader(torch.utils.data.TensorDataset(fakes, fakes_classes), batch_size=100)
+                fid = FIDScorer().calculate_fid(real_loader, fake_loader, device=DEVICE)
+                logger.add_scalar("fid", fid, server_round)
 
-            metrics = {"fid" : float(fid)}
-            return loss, metrics
+                metrics = {"fid" : float(fid)}
+        else:
+            metrics = {}
+
+        return loss, metrics
         
     return evaluate
 
