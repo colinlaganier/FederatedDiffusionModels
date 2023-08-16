@@ -28,7 +28,7 @@ from Scheduler import GradualWarmupScheduler
 from config import modelConfig
 
 warnings.filterwarnings("ignore", category=UserWarning)
-DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+# DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 class DiffusionClient(fl.client.Client):
     """Flower client implementing CIFAR-10 image classification using PyTorch."""
@@ -36,11 +36,12 @@ class DiffusionClient(fl.client.Client):
     def __init__(
         self,
         cid: str,
+        device: int,
         trainset: torchvision.datasets.folder.ImageFolder,
         testset: torchvision.datasets.folder.ImageFolder,
     ) -> None:
         self.cid = cid
-        self.device = DEVICE
+        self.device = torch.device(f"cuda:{device}" if torch.cuda.is_available() else "cpu")
 
         # Initialize model
         self.model = load_model(modelConfig).to(self.device)
@@ -94,7 +95,7 @@ class DiffusionClient(fl.client.Client):
         trainloader = torch.utils.data.DataLoader(
             self.trainset, batch_size=batch_size, shuffle=True, num_workers=4, drop_last=True, pin_memory=True)
         
-        train(self.model, self.trainer, self.optimizer, self.warmUpScheduler, self.grad_clip, trainloader, epochs, DEVICE)
+        train(self.model, self.trainer, self.optimizer, self.warmUpScheduler, self.grad_clip, trainloader, epochs, self.device)
 
         # Return the refined weights and the number of examples used for training
         weights_prime: NDArrays = self.model.get_weights()
@@ -148,6 +149,9 @@ def main() -> None:
         type=str,
         help="Logserver address (no default)",
     )
+    parser.add_argument(
+        "--device", type=int, default=0, help="Device (default: 0)"
+    )
     args = parser.parse_args()
 
     # Configure logger
@@ -157,7 +161,7 @@ def main() -> None:
     trainset, testset = load_data(args.dataset_path, args.cid)
 
     # Start client
-    client = DiffusionClient(args.cid, trainset, testset)
+    client = DiffusionClient(args.cid, args.device, trainset, testset)
     fl.client.start_client(
         server_address="127.0.0.1:8080",
         client=client)

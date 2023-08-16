@@ -30,6 +30,8 @@ server_address="[::]:8080"
 num_clients=2
 data_path="C:\Users\ColinLaganier\Documents\UCL\Dissertation\Testing\data\cinic-10\federated\5"
 num_epochs=1
+dev=0
+device_count=(0 0 0 0)
 
 # Get the options
 while getopts c:r:s:d:e:h: flag
@@ -47,17 +49,32 @@ done
 
 set -e
 
-python server.py --dataset-path $data_path --num-clients $num_clients --rounds $num_rounds --epochs $num_epochs&
+python server.py --dataset-path $data_path --num-clients $num_clients --rounds $num_rounds --epochs $num_epochs --device $device&
 sleep 3  # Sleep for 3s to give the server enough time to start
+# Increment device count
+((device_count[$dev]++))
+((dev++))
 
 echo "Starting $num_clients clients."
 for ((i = 0; i < $num_clients; i++))
 do
+    if [[ $((device_count[$dev])) == 2 ]]
+    then
+        ((dev++))
+    fi
+    if [[ $dev == 4 ]]
+    then
+        dev=0
+    fi 
     echo "Starting client $i"
     python client.py \
       --dataset-path $data_path \
-      --cid $i &
+      --cid $i \
+      --device $device &
     #   --server_address=$SERVER_ADDRESS &
+    device_count = $((device_count + 1))
+    ((device_count[$dev]++))
+    ((dev++))
 done
 echo "Started $num_clients clients."
 

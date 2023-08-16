@@ -14,6 +14,6 @@ def load_data(path, client_id):
     """Load training and test set."""
     mean, std = get_mean_std("cinic10")
     transform = Compose([ToTensor(), Normalize(mean, std)])
-    trainset = ImageFolder(path + "\\train\\client_" + str(client_id), transform=transform)
-    testset = ImageFolder(path + "\\test", transform=transform)
+    trainset = ImageFolder(path + "/train/client_" + str(client_id), transform=transform)
+    testset = ImageFolder(path + "/test", transform=transform)
     return trainset, testset

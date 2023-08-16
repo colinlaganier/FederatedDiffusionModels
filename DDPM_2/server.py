@@ -92,8 +92,12 @@ def main() -> None:
     parser.add_argument(
         "--epochs", type=int, default=1, help="Number of epochs (default: 1)",
     )
+    parser.add_argument(
+        "--device", type=int, default=0, help="Device (default: 0)"
+    )
     args = parser.parse_args()
     num_epochs = args.epochs
+    device = torch.device(f"cuda:{args.device}" if torch.cuda.is_available() else "cpu")
 
     # Load evaluation data
     _, testset = load_data(args.dataset_path, 0)
@@ -103,7 +107,7 @@ def main() -> None:
         fraction_fit=args.sample_fraction,
         min_fit_clients=args.num_clients,
         min_available_clients=args.num_clients,
-        evaluate_fn=get_evaluate_fn(testset),
+        evaluate_fn=get_evaluate_fn(testset, device),
         on_fit_config_fn=fit_config,
     )
     
@@ -126,6 +130,7 @@ def fit_config(server_round: int) -> Dict[str, fl.common.Scalar]:
 
 def get_evaluate_fn(
     testset: torchvision.datasets.folder.ImageFolder,
+    device: torch.device,
 ) -> Callable[[fl.common.NDArray], Optional[Tuple[float, float]]]:
     """Return an evaluation function for centralized evaluation."""
 
@@ -134,7 +139,7 @@ def get_evaluate_fn(
         # Load model and set weights
         model = load_model(modelConfig)
         model.set_weights(weights)
-        model.to(DEVICE)
+        model.to(device)
         model.eval()
         
         loss = 0
@@ -148,14 +153,14 @@ def get_evaluate_fn(
 
                 # Store fake images generated
                 fakes = [] 
-                fakes_classes = torch.arange(1,11).repeat_interleave(num_samples // 10, 0).to(DEVICE)
+                fakes_classes = torch.arange(1,11).repeat_interleave(num_samples // 10, 0).to(device)
 
                 for idx in range(num_batches):
                     sampler = GaussianDiffusionSampler(
-                        model, modelConfig["beta_1"], modelConfig["beta_T"], modelConfig["T"], w=modelConfig["w"]).to(DEVICE)
+                        model, modelConfig["beta_1"], modelConfig["beta_T"], modelConfig["T"], w=modelConfig["w"]).to(device)
                     # Sampled from standard normal distribution
                     noise = torch.randn(
-                        size=[batch_size, 3, modelConfig["img_size"], modelConfig["img_size"]], device=DEVICE)
+                        size=[batch_size, 3, modelConfig["img_size"], modelConfig["img_size"]], device=device)
                     fakes_batch = sampler(noise, fakes_classes[idx * batch_size : (idx + 1) * batch_size])
                     fakes_batch = fakes_batch * 0.5 + 0.5  # [0 ~ 1]
                     fakes.append(fakes_batch)
@@ -167,7 +172,7 @@ def get_evaluate_fn(
                 subset = torch.utils.data.Subset(testset, random.sample(range(real_num), min(num_samples, real_num)))
                 real_loader = torch.utils.data.DataLoader(subset, batch_size=100)
                 fake_loader = torch.utils.data.DataLoader(torch.utils.data.TensorDataset(fakes, fakes_classes), batch_size=100)
-                fid = FIDScorer().calculate_fid(real_loader, fake_loader, device=DEVICE)
+                fid = FIDScorer().calculate_fid(real_loader, fake_loader, device=device)
                 logger.add_scalar("fid", fid, server_round)
 
                 metrics = {"fid" : float(fid)}
