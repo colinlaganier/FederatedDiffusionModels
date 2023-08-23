@@ -130,7 +130,7 @@ def main() -> None:
         "--cid", type=str, required=True, help="Client CID (no default)"
     )
     parser.add_argument(
-        "--dataset-path", type=str, required=False, help="Path to dataset (no default)"
+        "--dataset-path", type=str, help="Path to dataset (no default)"
     )
     parser.add_argument(
         "--log_host",
@@ -138,7 +138,7 @@ def main() -> None:
         help="Logserver address (no default)",
     )
     parser.add_argument(
-        "dataset", type=str, choices=["emnist, cinic10"], required=False, default="emnist"
+        "dataset", type=str, choices=["emnist, cinic10"], default="emnist"
     )
     args = parser.parse_args()
 
