@@ -38,4 +38,4 @@ conda activate FedKDD
 # Run the application
 nvidia-smi
 cd DDPM
-sh run.sh -c 5 -r 10 -e 100 -d ../dataset/cinic-10/Federated/5
+sh run.sh -c 5 -r 100 -e 1

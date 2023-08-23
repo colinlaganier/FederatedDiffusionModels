@@ -152,15 +152,16 @@ def get_evaluate_fn(
         # loss = test(model, testloader, device=DEVICE)
         loss = 0
         real_num = len(testset)
-        num_samples = 10000
-        steps = 500
+        num_samples = 2500
+        steps = 2
         eta = 1.
+        metics = {}
         
         if server_round % 10 == 0:
             with torch.no_grad():
             # Generate fake images
                 noise = torch.randn([num_samples, 1, 32, 32], device=DEVICE)
-                fakes_classes = torch.arange(10, device=DEVICE).repeat_interleave(1000, 0)
+                fakes_classes = torch.arange(10, device=DEVICE).repeat_interleave(250, 0)
                 fakes = sample(model, noise, steps, eta, fakes_classes)
                 
                 subset = torch.utils.data.Subset(testset, random.sample(range(real_num), min(num_samples, real_num)))
@@ -168,9 +169,9 @@ def get_evaluate_fn(
                 fake_loader = torch.utils.data.DataLoader(torch.utils.data.TensorDataset(fakes, fakes_classes), batch_size=100)
                 fid = FIDScorer().calculate_fid(real_loader, fake_loader, device=DEVICE)
 
-        logger.add_scalar("fid", fid, server_round)
+                logger.add_scalar("fid", fid, server_round)
 
-        metrics = {"fid" : float(fid)}
+                metrics = {"fid" : float(fid)}
         return loss, metrics
 
     return evaluate
