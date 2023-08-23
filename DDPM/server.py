@@ -40,6 +40,9 @@ class SaveModelStrategy(fl.server.strategy.FedAvg):
             state_dict = OrderedDict({k: torch.tensor(v) for k, v in params_dict})
             model.load_state_dict(state_dict, strict=True)
             torch.save(model.state_dict(), checkpoint_path + f"/model.pth")
+            # Save the model with round number
+            if (server_round in [25, 50, 100, 150, 200, 250]):
+                torch.save(model.state_dict(), checkpoint_path + f"/model_{server_round}.pth")
 
         return aggregated_parameters, aggregated_metrics
 
@@ -86,13 +89,16 @@ def main() -> None:
         help="Logserver address (no default)",
     )
     parser.add_argument(
-        "--dataset-path", type=str, required=True, help="Path to dataset (no default)"
+        "--dataset-path", type=str, required=False, help="Path to dataset (no default)"
     )
     parser.add_argument(
         "--num-clients", type=int, required=True, help="Number of clients (no default)"
     )
     parser.add_argument(
         "--epochs", type=int, default=1, help="Number of epochs (default: 1)",
+    )
+    parser.add_argument(
+        "dataset", type=str, choices=["emnist, cinic10"], required=False, default="emnist"
     )
     args = parser.parse_args()
     num_epochs = args.epochs

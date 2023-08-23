@@ -4,7 +4,11 @@
 # Tensorboard event files
 /runs/*
 !runs/README.md
-
+/DDPM/synthetic
+/DDPM/data
+/dataset
+/data
+/DDPM_2/runs
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

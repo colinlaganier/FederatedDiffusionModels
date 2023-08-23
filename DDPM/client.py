@@ -130,22 +130,28 @@ def main() -> None:
         "--cid", type=str, required=True, help="Client CID (no default)"
     )
     parser.add_argument(
-        "--dataset-path", type=str, required=True, help="Path to dataset (no default)"
+        "--dataset-path", type=str, required=False, help="Path to dataset (no default)"
     )
     parser.add_argument(
         "--log_host",
         type=str,
         help="Logserver address (no default)",
     )
+    parser.add_argument(
+        "dataset", type=str, choices=["emnist, cinic10"], required=False, default="emnist"
+    )
     args = parser.parse_args()
 
     # Configure logger
     fl.common.logger.configure(f"client_{args.cid}", host=args.log_host)
 
-    # Load model and data
+    # Load model and data   
     model = Diffusion().to(DEVICE)
     # model_ema = deepcopy(model)
-    trainset, testset = load_data(args.dataset_path, args.cid)
+    if args.dataset == "emnist":
+        trainset, testset = load_data(args.dataset, args.cid)
+    else:
+        trainset, testset = load_data(args.dataset, args.cid, args.dataset_path)
 
     # Start client
     client = DiffusionClient(args.cid, model, trainset, testset)

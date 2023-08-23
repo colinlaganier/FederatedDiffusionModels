@@ -30,6 +30,7 @@ server_address="[::]:8080"
 num_clients=2
 data_path="C:\Users\ColinLaganier\Documents\UCL\Dissertation\Testing\data\cinic-10\federated\5"
 num_epochs=1
+dataset="emnist"
 
 # Get the options
 while getopts c:r:s:d:e:h: flag
@@ -46,8 +47,8 @@ do
 done
 
 set -e
-
-python server.py --dataset-path $data_path --num-clients $num_clients --rounds $num_rounds --epochs $num_epochs&
+# --dataset-path $data_path
+python server.py  --dataset $dataset --num-clients $num_clients --rounds $num_rounds --epochs $num_epochs&
 sleep 3  # Sleep for 3s to give the server enough time to start
 
 echo "Starting $num_clients clients."
@@ -55,8 +56,9 @@ for ((i = 0; i < $num_clients; i++))
 do
     echo "Starting client $i"
     python client.py \
-      --dataset-path $data_path \
-      --cid $i &
+    #   --dataset-path $data_path \
+      --cid $i \
+      --dataset $dataset &
     #   --server_address=$SERVER_ADDRESS &
 done
 echo "Started $num_clients clients."
