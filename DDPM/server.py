@@ -34,7 +34,7 @@ class SaveModelStrategy(fl.server.strategy.FedAvg):
 
         # Save the model
         if aggregated_parameters is not None:
-            model = load_model()
+            model = load_model(1)
             aggregated_ndarrays: List[np.ndarray] = fl.common.parameters_to_ndarrays(aggregated_parameters)
             params_dict = zip(model.state_dict().keys(), aggregated_ndarrays)
             state_dict = OrderedDict({k: torch.tensor(v) for k, v in params_dict})
@@ -56,8 +56,8 @@ def main() -> None:
     parser.add_argument(
         "--server_address",
         type=str,
-        default="0.0.0.0:6060",
-        help=f"gRPC server address (default: 0.0.0.0:6060)",
+        default="0.0.0.0:8080",
+        help=f"gRPC server address (default: 0.0.0.0:8080)",
     )
     parser.add_argument(
         "--rounds",
@@ -145,7 +145,7 @@ def get_evaluate_fn(
 
     def evaluate(server_round, parameters: fl.common.NDArray, config) -> Optional[Tuple[float, float]]:
         """Use the entire CIFAR-10 test set for evaluation."""
-        model = load_model()
+        model = load_model(1)
         model.set_weights(parameters)
         model.to(DEVICE)
         testloader = torch.utils.data.DataLoader(testset, batch_size=100, shuffle=False)
@@ -156,15 +156,18 @@ def get_evaluate_fn(
         steps = 500
         eta = 1.
         
-        # Generate fake images
-        noise = torch.randn([num_samples, 3, 32, 32], device=DEVICE)
-        fakes_classes = torch.arange(10, device=DEVICE).repeat_interleave(250, 0)
-        fakes = sample(model, noise, steps, eta, fakes_classes)
-        
-        subset = torch.utils.data.Subset(testset, random.sample(range(real_num), min(num_samples, real_num)))
-        real_loader = torch.utils.data.DataLoader(subset, batch_size=100)
-        fake_loader = torch.utils.data.DataLoader(torch.utils.data.TensorDataset(fakes, fakes_classes), batch_size=100)
-        fid = FIDScorer().calculate_fid(real_loader, fake_loader, device=DEVICE)
+        if server_round % 10 == 0:
+            with torch.no_grad():
+            # Generate fake images
+            noise = torch.randn([num_samples, 1, 32, 32], device=DEVICE)
+            fakes_classes = torch.arange(10, device=DEVICE).repeat_interleave(1000, 0)
+            fakes = sample(model, noise, steps, eta, fakes_classes)
+            
+            subset = torch.utils.data.Subset(testset, random.sample(range(real_num), min(num_samples, real_num)))
+            real_loader = torch.utils.data.DataLoader(subset, batch_size=100)
+            fake_loader = torch.utils.data.DataLoader(torch.utils.data.TensorDataset(fakes, fakes_classes), batch_size=100)
+            fid = FIDScorer().calculate_fid(real_loader, fake_loader, device=DEVICE)
+
         logger.add_scalar("fid", fid, server_round)
 
         metrics = {"fid" : float(fid)}

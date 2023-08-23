@@ -18,9 +18,10 @@ model = load_model()
 model.load_state_dict(torch.load("checkpoint/model.pth"))
 model.to("cuda:0")
 total_samples = 100000
-num_samples = 2500
-for i in range(40):
-    noise = torch.randn(num_samples, 3, 32, 32).to(device)
+num_samples = 10000
+num_channels = 1
+for i in range(10):
+    noise = torch.randn(num_samples, num_channels, 32, 32).to(device)
     fakes_classes = torch.arange(10, device=device).repeat_interleave(num_samples // 10, 0)
     fakes = sample(model, noise, 500, 1., fakes_classes)
 

@@ -53,7 +53,7 @@ def expand_to_planes(input, shape):
 
 
 class Diffusion(nn.Module):
-    def __init__(self):
+    def __init__(self, num_channels=3):
         super().__init__()
         c = 64  # The base channel count
 
@@ -63,7 +63,7 @@ class Diffusion(nn.Module):
         self.class_embed = nn.Embedding(10, 4)
 
         self.net = nn.Sequential(   # 32x32
-            ResConvBlock(3 + 16 + 4, c, c),
+            ResConvBlock(num_channels + 16 + 4, c, c),
             ResConvBlock(c, c, c),
             SkipBlock([
                 nn.AvgPool2d(2),  # 32x32 -> 16x16
@@ -90,7 +90,7 @@ class Diffusion(nn.Module):
                 nn.Upsample(scale_factor=2),
             ]),  # 16x16 -> 32x32
             ResConvBlock(c * 2, c, c),
-            ResConvBlock(c, c, 3, dropout_last=False),
+            ResConvBlock(c, c, num_channels, dropout_last=False),
         )
 
     def forward(self, input, log_snrs, cond):
@@ -109,6 +109,6 @@ class Diffusion(nn.Module):
         )
         self.load_state_dict(state_dict, strict=True)
 
-def load_model() -> Diffusion:
+def load_model(num_channels) -> Diffusion:
     """Load diffusion model."""
-    return Diffusion()
+    return Diffusion(num_channels)

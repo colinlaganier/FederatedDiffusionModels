@@ -26,7 +26,7 @@ Help()
 ############################################################
 
 # Default values
-server_address="[::]:8080"
+server_address="172.31.26.108:8080"
 num_clients=2
 data_path="C:\Users\ColinLaganier\Documents\UCL\Dissertation\Testing\data\cinic-10\federated\5"
 num_epochs=1

@@ -1,6 +1,7 @@
 from torchvision.datasets import ImageFolder, EMNIST
-from torchvision.transforms import Compose, Normalize, ToTensor
+from torchvision.transforms import Compose, Normalize, ToTensor, Resize
 from torch.utils.data import DataLoader, Subset
+import torchvision.transforms.functional as TF
 
 def balanced_split(dataset, num_splits, client_id):
     """
@@ -86,12 +87,16 @@ def get_mean_std(dataset_id):
 def load_data(dataset, client_id, path=None):
     """Load training and test set."""
     mean, std = get_mean_std(dataset)
-    transform = Compose([ToTensor(), Normalize(mean, std)])
+    
     if dataset == "cifar10":
+        transform = Compose([ToTensor(), Normalize(mean, std)])
         trainset = ImageFolder(path + "/train/client_" + str(client_id), transform=transform)
         testset = ImageFolder(path + "/test", transform=transform)
     else: 
-        if client_id:
+        transform = Compose([lambda img: TF.rotate(img, -90),
+                                lambda img: TF.hflip(img),
+                                Resize(32), ToTensor(), Normalize(mean, std)])
+        if client_id:               
             trainset = EMNIST(root='./data', train=True, download=True, transform=transform, split='digits')
             trainset = balanced_split(trainset, 5, client_id)
         else: 

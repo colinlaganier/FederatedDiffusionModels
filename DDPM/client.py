@@ -146,7 +146,7 @@ def main() -> None:
     fl.common.logger.configure(f"client_{args.cid}", host=args.log_host)
 
     # Load model and data   
-    model = Diffusion().to(DEVICE)
+    model = Diffusion(1).to(DEVICE)
     # model_ema = deepcopy(model)
     if args.dataset == "emnist":
         trainset, testset = load_data(args.dataset, args.cid)
