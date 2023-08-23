@@ -138,7 +138,7 @@ def main() -> None:
         help="Logserver address (no default)",
     )
     parser.add_argument(
-        "dataset", type=str, choices=["emnist, cinic10"], default="emnist"
+        "--dataset", type=str, choices=["emnist","cinic10"], default="emnist"
     )
     args = parser.parse_args()
 
