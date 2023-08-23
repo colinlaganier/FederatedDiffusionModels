@@ -89,7 +89,7 @@ def main() -> None:
         help="Logserver address (no default)",
     )
     parser.add_argument(
-        "--dataset-path", type=str, required=False, help="Path to dataset (no default)"
+        "--dataset-path", type=str, help="Path to dataset (no default)"
     )
     parser.add_argument(
         "--num-clients", type=int, required=True, help="Number of clients (no default)"
@@ -98,7 +98,7 @@ def main() -> None:
         "--epochs", type=int, default=1, help="Number of epochs (default: 1)",
     )
     parser.add_argument(
-        "dataset", type=str, choices=["emnist, cinic10"], required=False, default="emnist"
+        "dataset", type=str, choices=["emnist, cinic10"], default="emnist"
     )
     args = parser.parse_args()
     num_epochs = args.epochs
