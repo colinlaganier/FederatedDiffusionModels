@@ -159,14 +159,14 @@ def get_evaluate_fn(
         if server_round % 10 == 0:
             with torch.no_grad():
             # Generate fake images
-            noise = torch.randn([num_samples, 1, 32, 32], device=DEVICE)
-            fakes_classes = torch.arange(10, device=DEVICE).repeat_interleave(1000, 0)
-            fakes = sample(model, noise, steps, eta, fakes_classes)
-            
-            subset = torch.utils.data.Subset(testset, random.sample(range(real_num), min(num_samples, real_num)))
-            real_loader = torch.utils.data.DataLoader(subset, batch_size=100)
-            fake_loader = torch.utils.data.DataLoader(torch.utils.data.TensorDataset(fakes, fakes_classes), batch_size=100)
-            fid = FIDScorer().calculate_fid(real_loader, fake_loader, device=DEVICE)
+                noise = torch.randn([num_samples, 1, 32, 32], device=DEVICE)
+                fakes_classes = torch.arange(10, device=DEVICE).repeat_interleave(1000, 0)
+                fakes = sample(model, noise, steps, eta, fakes_classes)
+                
+                subset = torch.utils.data.Subset(testset, random.sample(range(real_num), min(num_samples, real_num)))
+                real_loader = torch.utils.data.DataLoader(subset, batch_size=100)
+                fake_loader = torch.utils.data.DataLoader(torch.utils.data.TensorDataset(fakes, fakes_classes), batch_size=100)
+                fid = FIDScorer().calculate_fid(real_loader, fake_loader, device=DEVICE)
 
         logger.add_scalar("fid", fid, server_round)
 
