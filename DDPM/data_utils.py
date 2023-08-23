@@ -27,7 +27,50 @@ def balanced_split(dataset, num_splits, id):
             class_counts[target] += 1
             remainder -= 1
 
-    return Subset(dataset, subset_indices[id])
+    return Subset(dataset, subset_indices[int(client_id)])
+
+def dirichlet_split(self, dataset, num_splits, client_id, beta=0.1):
+    """
+    Splits training data into client datasets based Dirichlet distribution
+
+    Args:
+        dataset (torch.utils.data.Dataset): training data
+        num_splits (int): number of client datasets to split into
+        beta (float): concentration parameter of Dirichlet distribution
+    Returns:
+        client_data (list): list of client datasets       
+    """
+    # set seed for reproducibility
+    np.random.seed(42)
+
+    label_distributions = []
+    # Generate label distributions for each class using Dirichlet distribution
+    for y in range(len(dataset.classes)):
+        label_distributions.append(np.random.dirichlet(np.repeat(beta, num_splits)))
+
+    labels = np.array(dataset.targets).astype(int)
+    client_idx_map = {i: {} for i in range(num_splits)}
+    client_size_map = {i: {} for i in range(num_splits)}
+
+    for y in range(len(dataset.classes)):
+        label_y_idx = np.where(labels == y)[0]
+        label_y_size = len(label_y_idx)
+
+        # Sample number of samples for each client from label distribution
+        sample_size = (label_distributions[y] * label_y_size).astype(int)
+        sample_size[num_splits - 1] += len(label_y_idx) - np.sum(sample_size)
+        for i in range(num_splits):
+            client_size_map[i][y] = sample_size[i]
+
+        np.random.shuffle(label_y_idx)
+        sample_interval = np.cumsum(sample_size)
+        for i in range(num_splits):
+            client_idx_map[i][y] = label_y_idx[(sample_interval[i - 1] if i > 0 else 0):sample_interval[i]]
+
+
+    client_i_idx = np.concatenate(list(client_idx_map[int(client_id)].values()))
+    np.random.shuffle(client_i_idx)
+    return Subset(dataset, client_i_idx)
 
 def get_mean_std(dataset_id):
     """Get mean and std for normalization."""
