@@ -98,13 +98,17 @@ def main() -> None:
         "--epochs", type=int, default=1, help="Number of epochs (default: 1)",
     )
     parser.add_argument(
-        "dataset", type=str, choices=["emnist, cinic10"], default="emnist"
+        "--dataset", type=str, choices=["emnist", "cinic10"], default="emnist"
     )
     args = parser.parse_args()
     num_epochs = args.epochs
 
     # Load evaluation data
-    _, testset = load_data(args.dataset_path, 0)
+    if args.dataset == "emnist":
+        _, testset = load_data(args.dataset, None)
+    else:
+        _, testset = load_data(args.dataset, None, args.dataset_path)
+    # _, testset = load_data(args.dataset_path, 0)
 
     # Create strategy
     strategy = SaveModelStrategy(
