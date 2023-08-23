@@ -2,7 +2,7 @@ from torchvision.datasets import ImageFolder, EMNIST
 from torchvision.transforms import Compose, Normalize, ToTensor
 from torch.utils.data import DataLoader, Subset
 
-def balanced_split(dataset, num_splits, id):
+def balanced_split(dataset, num_splits, client_id):
     """
     Splits training data into client datasets with balanced classes
     
@@ -29,7 +29,7 @@ def balanced_split(dataset, num_splits, id):
 
     return Subset(dataset, subset_indices[int(client_id)])
 
-def dirichlet_split(self, dataset, num_splits, client_id, beta=0.1):
+def dirichlet_split(dataset, num_splits, client_id, beta=0.1):
     """
     Splits training data into client datasets based Dirichlet distribution
 
