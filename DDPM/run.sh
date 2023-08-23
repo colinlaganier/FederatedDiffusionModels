@@ -56,9 +56,9 @@ for ((i = 0; i < $num_clients; i++))
 do
     echo "Starting client $i"
     python client.py \
-    #   --dataset-path $data_path \
       --cid $i \
       --dataset $dataset &
+    #   --dataset-path $data_path \
     #   --server_address=$SERVER_ADDRESS &
 done
 echo "Started $num_clients clients."
