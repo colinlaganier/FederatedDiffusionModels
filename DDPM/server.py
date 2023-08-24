@@ -41,7 +41,7 @@ class SaveModelStrategy(fl.server.strategy.FedAvg):
             model.load_state_dict(state_dict, strict=True)
             torch.save(model.state_dict(), checkpoint_path + f"/model.pth")
             # Save the model with round number
-            if (server_round in [25, 50, 100, 150, 200, 250]):
+            if (server_round in [25, 50, 75, 100, 150, 200, 250]):
                 torch.save(model.state_dict(), checkpoint_path + f"/model_{server_round}.pth")
 
         return aggregated_parameters, aggregated_metrics
@@ -54,7 +54,7 @@ def main() -> None:
     global num_epochs
     parser = argparse.ArgumentParser(description="Flower")
     parser.add_argument(
-        "--server_address",
+        "--server-address",
         type=str,
         default="0.0.0.0:8080",
         help=f"gRPC server address (default: 0.0.0.0:8080)",

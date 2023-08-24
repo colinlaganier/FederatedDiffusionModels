@@ -17,8 +17,8 @@ class FIDScorer:
 
         activations = []
         for (batch, _) in images:
-            if len(batch.shape) < 4:
-                batch = torch.unsqueeze(batch, 1)
+            # if len(batch.shape) < 4:
+            #     batch = torch.unsqueeze(batch, 1)
 
             if batch.size(1) == 1:
                 # greyscale

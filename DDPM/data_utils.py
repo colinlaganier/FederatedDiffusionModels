@@ -30,7 +30,7 @@ def balanced_split(dataset, num_splits, client_id):
 
     return Subset(dataset, subset_indices[int(client_id)])
 
-def dirichlet_split(dataset, num_splits, client_id, beta=0.1):
+def dirichlet_split(dataset, num_splits, client_id, beta=0.5):
     """
     Splits training data into client datasets based Dirichlet distribution
 
@@ -98,7 +98,7 @@ def load_data(dataset, client_id, path=None):
                                 Resize(32), ToTensor(), Normalize(mean, std)])
         if client_id:               
             trainset = EMNIST(root='./data', train=True, download=True, transform=transform, split='digits')
-            trainset = balanced_split(trainset, 5, client_id)
+            trainset = dirichlet_split(trainset, 5, client_id)
         else: 
             trainset = None
 

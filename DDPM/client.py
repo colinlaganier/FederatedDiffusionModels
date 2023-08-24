@@ -121,7 +121,7 @@ def main() -> None:
     """Load data, create and start CifarClient."""
     parser = argparse.ArgumentParser(description="Flower")
     parser.add_argument(
-        "--server_address",
+        "--server-address",
         type=str,
         default="127.0.0.1:8080",
         help=f"gRPC server address (default: 127.0.0.1:8080)",

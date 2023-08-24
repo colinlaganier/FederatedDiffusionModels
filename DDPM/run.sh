@@ -26,7 +26,7 @@ Help()
 ############################################################
 
 # Default values
-server_address="172.31.26.108:8080"
+server_address="localhost:8080"
 num_clients=2
 data_path="C:\Users\ColinLaganier\Documents\UCL\Dissertation\Testing\data\cinic-10\federated\5"
 num_epochs=1
@@ -48,7 +48,7 @@ done
 
 set -e
 # --dataset-path $data_path
-python server.py  --dataset $dataset --num-clients $num_clients --rounds $num_rounds --epochs $num_epochs&
+python server.py  --dataset $dataset --num-clients $num_clients --rounds $num_rounds --epochs $num_epochs --server-address $server_address&
 sleep 3  # Sleep for 3s to give the server enough time to start
 
 echo "Starting $num_clients clients."
@@ -57,9 +57,9 @@ do
     echo "Starting client $i"
     python client.py \
       --cid $i \
+      --server-address $server_address \
       --dataset $dataset &
     #   --dataset-path $data_path \
-    #   --server_address=$SERVER_ADDRESS &
 done
 echo "Started $num_clients clients."
 
