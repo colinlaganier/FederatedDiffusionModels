@@ -19,11 +19,12 @@ from torch.hub import get_dir, download_url_to_file
 from torch.utils.data import Subset, DataLoader
 from tqdm import tqdm
 from torchvision.transforms import Compose, Normalize, ToTensor, Resize
-from torchvision.datasets import EMNIST
+from torchvision.datasets import EMNIST, ImageFolder
 from torchvision.transforms import functional as TF
 from model import load_model
 from utils import sample
 import random
+from FIDScorer import FIDScorer
 
 
 def balanced_split(dataset, num_splits, client_id):
@@ -321,6 +322,7 @@ if __name__ == "__main__":
     fake_dataset = ImageFolder(root = "data/synthetic/centralized/10K", transform=ToTensor())
 
 
+
     # # Evaluate FID
     real_num = len(testset)
     # subset = torch.utils.data.Subset(testset, random.sample(range(real_num), min(total_samples, real_num)))
@@ -330,6 +332,16 @@ if __name__ == "__main__":
     print("Computing FID")
     fid = FIDScorer().calculate_fid(real_loader, fake_loader, device=device)
     print("FID: {}".format(fid))
+
+    fake_dataset_3d = torch.zeros((fake_dataset.data.shape[0], 3, 32, 32))
+    fake_dataset_3d[:, 0, :, :] = fake_dataset.data
+    fake_dataset_3d[:, 1, :, :] = fake_dataset.data
+    fake_dataset_3d[:, 2, :, :] = fake_dataset.data
+
+    testset_3d = torch.zeros((testset.data.shape[0], 3, 32, 32))
+    testset_3d[:, 0, :, :] = testset.data
+    testset_3d[:, 1, :, :] = testset.data
+    testset_3d[:, 2, :, :] = testset.data
  
     def eval_pr():
         decimal_places = math.ceil(math.log(eval_total_size, 10))
@@ -340,13 +352,13 @@ if __name__ == "__main__":
             num_workers=num_workers, device=model_device)
         manifold_path = os.path.join(precomputed_dir, f"pr_manifold_{dataset}.pt")
         if not os.path.exists(manifold_path):
-            manifold_builder = _ManifoldBuilder(data=testset)
+            manifold_builder = _ManifoldBuilder(data=testset_3d)
             manifold_builder.save(manifold_path)
             true_manifold = deepcopy(manifold_builder.manifold)
             del manifold_builder
         else:
             true_manifold = torch.load(manifold_path)
-        gen_manifold = deepcopy(_ManifoldBuilder(data=fake_dataset).manifold)
+        gen_manifold = deepcopy(_ManifoldBuilder(data=fake_dataset_3d).manifold)
 
         precision, recall = calc_pr(
             gen_manifold, true_manifold,
