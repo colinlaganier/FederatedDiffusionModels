@@ -18,6 +18,35 @@ from collections import namedtuple
 from torch.hub import get_dir, download_url_to_file
 from torch.utils.data import Subset, DataLoader
 from tqdm import tqdm
+from torchvision.transforms import Compose, Normalize, ToTensor, Resize
+from torchvision.datasets import EMNIST
+
+def balanced_split(dataset, num_splits, client_id):
+    """
+    Splits training data into client datasets with balanced classes
+    
+    Args:
+        dataset (torch.utils.data.Dataset): training data
+        num_splits (int): number of client datasets to split into
+    Returns:
+        client_data (list): list of client datasets
+    """
+    samples_per_class = len(dataset) // num_splits
+    remainder = len(dataset) % num_splits
+    num_classes = 10
+    class_counts = [0] * num_classes # number of samples per class
+    subset_indices = [[] for _ in range(num_splits)] # indices of samples per subset
+    for i, (data, target) in enumerate(dataset):
+        # Add sample to subset if number of samples per class is less than samples_per_class
+        if class_counts[target] < samples_per_class:
+            subset_indices[i % num_splits].append(i)
+            class_counts[target] += 1
+        elif remainder > 0:
+            subset_indices[i % num_splits].append(i)
+            class_counts[target] += 1
+            remainder -= 1
+
+    return Subset(dataset, subset_indices[int(client_id)])
 
 
 class VGGFeatureExtractor(nn.Module):
