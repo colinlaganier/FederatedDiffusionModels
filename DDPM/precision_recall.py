@@ -18,7 +18,7 @@ from collections import namedtuple
 from torch.hub import get_dir, download_url_to_file
 from torch.utils.data import Subset, DataLoader
 from tqdm import tqdm
-from torchvision.transforms import Compose, Normalize, ToTensor, Resize
+from torchvision.transforms import Compose, Normalize, ToTensor, Resize, GrayScale
 from torchvision.datasets import EMNIST, ImageFolder
 from torchvision.transforms import functional as TF
 from model import load_model
@@ -297,33 +297,34 @@ if __name__ == "__main__":
     # testset = torchvision.datasets.CIFAR10(root='./data', train=False, download=True, transform=transforms.ToTensor())
     #testset = torchvision.datasets.ImageFolder(root="../../Testing/data/cinic-10/federated/5/train/client_0", transform=transforms.ToTensor())
     mean, std = [0.5], [0.5]
-    transform = Compose([lambda img: TF.rotate(img, -90), lambda img: TF.hflip(img), Resize(32), ToTensor(), Normalize(mean, std)])
+    transform = Compose([lambda img: TF.rotate(img, -90), lambda img: TF.hflip(img), Resize(32), ToTensor(), Normalize(mean, std), Grayscale(num_output_channels=3)])
     testset = EMNIST(root='./data', train=False, download=True, transform=transform, split='digits')
     testset = balanced_split(testset, 4, 0)
     # print("Testset size: {}".format(len(testset)))
 
-    model = load_model(1)
-    checkpoint = torch.load("../checkpoints/20230825-164926/model_100.pth")
-    model.load_state_dict(checkpoint)
-    model.to("cuda:0")
-    total_samples = 10000
-    num_samples = 10000
-    num_channels = 1
-    #for i in range(1):
-    noise = torch.randn(num_samples, num_channels, 32, 32).to(device)
-    fakes_classes = torch.arange(10, device=device).repeat_interleave(num_samples // 10, 0)
-    fakes = sample(model, noise, 500, 1., fakes_classes)
+    # model = load_model(1)
+    # checkpoint = torch.load("../checkpoints/20230825-164926/model_100.pth")
+    # model.load_state_dict(checkpoint)
+    # model.to("cuda:0")
+    # total_samples = 10000
+    # num_samples = 10000
+    # num_channels = 1
+    # #for i in range(1):
+    # noise = torch.randn(num_samples, num_channels, 32, 32).to(device)
+    # fakes_classes = torch.arange(10, device=device).repeat_interleave(num_samples // 10, 0)
+    # fakes = sample(model, noise, 5, 1., fakes_classes)
 
     # for idx, fake in enumerate(fakes):
     #     cls = idx // (num_samples // 10)
     #     fake = TF.to_pil_image(fake.cpu().add(1).div(2).clamp(0, 1)).save("./data/synthetic/centralized/10K/{}/{}.png".format(labels[cls],counter[cls]))
     #     counter[cls] += 1
 
-    # fake_dataset = ImageFolder(root = "data/synthetic/centralized/10K", transform=ToTensor())
+    fake_transform = Compose([ToTensor(), Normalize(mean, std), Grayscale(num_output_channels=3)])
+    fake_dataset = ImageFolder(root = "data/synthetic/centralized/10K", transform=ToTensor())
 
 
 
-    # # Evaluate FID
+    # # # Evaluate FID
     real_num = len(testset)
     # subset = torch.utils.data.Subset(testset, random.sample(range(real_num), min(total_samples, real_num)))
     real_loader = torch.utils.data.DataLoader(testset, batch_size=100)
@@ -333,23 +334,26 @@ if __name__ == "__main__":
     fid = FIDScorer().calculate_fid(real_loader, fake_loader, device=device)
     print("FID: {}".format(fid))
 
-    fake_dataset_3d = torch.zeros((fakes.data.shape[0], 3, 32, 32))
-    fake_dataset_3d[:, 0, :, :] = fakes
-    fake_dataset_3d[:, 1, :, :] = fakes
-    fake_dataset_3d[:, 2, :, :] = fakes
+    # fake_dataset_3d = torch.zeros((fakes.data.shape[0], 3, 32, 32))
+    # fake_dataset_3d[:, 0, :, :] = fakes
+    # fake_dataset_3d[:, 1, :, :] = fakes
+    # fake_dataset_3d[:, 2, :, :] = fakes
 
-    testset_3d = torch.zeros((len(testset), 3, 32, 32))
-    testset_3d_labels = torch.zeros((len(testset),))
-    for i in range(len(testset)): # or i, image in enumerate(dataset)
-        img, label = testset[i]
-        testset_3d[i, 0, :, :] = img
-        testset_3d[i, 1, :, :] = img
-        testset_3d[i, 2, :, :] = img
-        testset_3d_labels[i] = label
+    # testset_3d = torch.zeros((len(testset), 3, 32, 32))
+    # testset_3d_labels = torch.zeros((len(testset),))
+    # for i in range(len(testset)): # or i, image in enumerate(dataset)
+    #     img, label = testset[i]
+    #     testset_3d[i, 0, :, :] = img
+    #     testset_3d[i, 1, :, :] = img
+    #     testset_3d[i, 2, :, :] = img
+    #     testset_3d_labels[i] = label
 
-    testset_3d = torch.utils.data.TensorDataset(testset_3d, testset_3d_labels)
-    fake_dataset_3d = torch.utils.data.TensorDataset(fake_dataset_3d, fakes_classes)
+    # testset_3d = torch.utils.data.TensorDataset(testset_3d, testset_3d_labels)
+    # fake_dataset_3d = torch.utils.data.TensorDataset(fake_dataset_3d, fakes_classes)
     
+    testset_3d = testset
+    fake_dataset_3d = fake_dataset
+
     def eval_pr():
         decimal_places = math.ceil(math.log(eval_total_size, 10))
         str_fmt = f".{decimal_places}f"
