@@ -302,24 +302,24 @@ if __name__ == "__main__":
     testset = balanced_split(testset, 4, 0)
     # print("Testset size: {}".format(len(testset)))
 
-    # model = load_model(1)
-    # checkpoint = torch.load("../checkpoints/20230825-164926/model_100.pth")
-    # model.load_state_dict(checkpoint)
-    # model.to("cuda:0")
-    # total_samples = 10000
-    # num_samples = 10000
-    # num_channels = 1
-    # #for i in range(1):
-    # noise = torch.randn(num_samples, num_channels, 32, 32).to(device)
-    # fakes_classes = torch.arange(10, device=device).repeat_interleave(num_samples // 10, 0)
-    # fakes = sample(model, noise, 500, 1., fakes_classes)
+    model = load_model(1)
+    checkpoint = torch.load("../checkpoints/20230825-164926/model_100.pth")
+    model.load_state_dict(checkpoint)
+    model.to("cuda:0")
+    total_samples = 10000
+    num_samples = 10000
+    num_channels = 1
+    #for i in range(1):
+    noise = torch.randn(num_samples, num_channels, 32, 32).to(device)
+    fakes_classes = torch.arange(10, device=device).repeat_interleave(num_samples // 10, 0)
+    fakes = sample(model, noise, 500, 1., fakes_classes)
 
     # for idx, fake in enumerate(fakes):
     #     cls = idx // (num_samples // 10)
     #     fake = TF.to_pil_image(fake.cpu().add(1).div(2).clamp(0, 1)).save("./data/synthetic/centralized/10K/{}/{}.png".format(labels[cls],counter[cls]))
     #     counter[cls] += 1
 
-    fake_dataset = ImageFolder(root = "data/synthetic/centralized/10K", transform=ToTensor())
+    # fake_dataset = ImageFolder(root = "data/synthetic/centralized/10K", transform=ToTensor())
 
 
 
@@ -327,7 +327,7 @@ if __name__ == "__main__":
     real_num = len(testset)
     # subset = torch.utils.data.Subset(testset, random.sample(range(real_num), min(total_samples, real_num)))
     real_loader = torch.utils.data.DataLoader(testset, batch_size=100)
-    # fake_dataset = torch.utils.data.TensorDataset(fakes, fakes_classes)
+    fake_dataset = torch.utils.data.TensorDataset(fakes, fakes_classes)
     fake_loader = torch.utils.data.DataLoader(fake_dataset, batch_size=100)
     print("Computing FID")
     fid = FIDScorer().calculate_fid(real_loader, fake_loader, device=device)
