@@ -20,6 +20,8 @@ from torch.utils.data import Subset, DataLoader
 from tqdm import tqdm
 from torchvision.transforms import Compose, Normalize, ToTensor, Resize
 from torchvision.datasets import EMNIST
+from torchvision.transforms import functional as TF
+from model import load_model
 
 def balanced_split(dataset, num_splits, client_id):
     """
