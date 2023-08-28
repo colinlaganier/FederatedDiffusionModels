@@ -22,6 +22,7 @@ from torchvision.transforms import Compose, Normalize, ToTensor, Resize
 from torchvision.datasets import EMNIST
 from torchvision.transforms import functional as TF
 from model import load_model
+from utils import sample
 
 def balanced_split(dataset, num_splits, client_id):
     """
@@ -253,7 +254,7 @@ if __name__ == "__main__":
     parser = ArgumentParser()
 
     parser.add_argument("--root", default="~/datasets", type=str)
-    parser.add_argument("--dataset", default="cifar10")
+    parser.add_argument("--dataset", default="emnist")
     parser.add_argument("--eval-batch-size", default=128, type=int)
     parser.add_argument("--eval-total-size", default=10000, type=int)
     parser.add_argument("--num-workers", default=4, type=int)
