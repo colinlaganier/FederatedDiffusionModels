@@ -333,16 +333,23 @@ if __name__ == "__main__":
     fid = FIDScorer().calculate_fid(real_loader, fake_loader, device=device)
     print("FID: {}".format(fid))
 
-    fake_dataset_3d = torch.zeros((fake_dataset.data.shape[0], 3, 32, 32))
-    fake_dataset_3d[:, 0, :, :] = fake_dataset.data
-    fake_dataset_3d[:, 1, :, :] = fake_dataset.data
-    fake_dataset_3d[:, 2, :, :] = fake_dataset.data
+    fake_dataset_3d = torch.zeros((fakes.data.shape[0], 3, 32, 32))
+    fake_dataset_3d[:, 0, :, :] = fakes
+    fake_dataset_3d[:, 1, :, :] = fakes
+    fake_dataset_3d[:, 2, :, :] = fakes
 
-    testset_3d = torch.zeros((testset.data.shape[0], 3, 32, 32))
-    testset_3d[:, 0, :, :] = testset.data
-    testset_3d[:, 1, :, :] = testset.data
-    testset_3d[:, 2, :, :] = testset.data
- 
+    testset_3d = torch.zeros((len(testset), 3, 32, 32))
+    testset_3d_labels = torch.zeros((len(testset),))
+    for i in range(len(testset)): # or i, image in enumerate(dataset)
+        img, label = testset[i]
+        testset_3d[i, 0, :, :] = img
+        testset_3d[i, 1, :, :] = img
+        testset_3d[i, 2, :, :] = img
+        testset_3d_labels[i] = label
+
+    testset_3d = torch.utils.data.TensorDataset(testset_3d, testset_3d_labels)
+    fake_dataset_3d = torch.utils.data.TensorDataset(fake_dataset_3d, fakes_classes)
+    
     def eval_pr():
         decimal_places = math.ceil(math.log(eval_total_size, 10))
         str_fmt = f".{decimal_places}f"
