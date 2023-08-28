@@ -23,6 +23,8 @@ from torchvision.datasets import EMNIST
 from torchvision.transforms import functional as TF
 from model import load_model
 from utils import sample
+import random
+
 
 def balanced_split(dataset, num_splits, client_id):
     """
@@ -297,31 +299,33 @@ if __name__ == "__main__":
     transform = Compose([lambda img: TF.rotate(img, -90), lambda img: TF.hflip(img), Resize(32), ToTensor(), Normalize(mean, std)])
     testset = EMNIST(root='./data', train=False, download=True, transform=transform, split='digits')
     testset = balanced_split(testset, 4, 0)
-    print("Testset size: {}".format(len(testset)))
+    # print("Testset size: {}".format(len(testset)))
 
-    model = load_model(1)
-    checkpoint = torch.load("../checkpoints/20230825-164926/model_100.pth")
-    model.load_state_dict(checkpoint)
-    model.to("cuda:0")
-    total_samples = 10000
-    num_samples = 10000
-    num_channels = 1
-    #for i in range(1):
-    noise = torch.randn(num_samples, num_channels, 32, 32).to(device)
-    fakes_classes = torch.arange(10, device=device).repeat_interleave(num_samples // 10, 0)
-    fakes = sample(model, noise, 500, 1., fakes_classes)
+    # model = load_model(1)
+    # checkpoint = torch.load("../checkpoints/20230825-164926/model_100.pth")
+    # model.load_state_dict(checkpoint)
+    # model.to("cuda:0")
+    # total_samples = 10000
+    # num_samples = 10000
+    # num_channels = 1
+    # #for i in range(1):
+    # noise = torch.randn(num_samples, num_channels, 32, 32).to(device)
+    # fakes_classes = torch.arange(10, device=device).repeat_interleave(num_samples // 10, 0)
+    # fakes = sample(model, noise, 500, 1., fakes_classes)
 
     # for idx, fake in enumerate(fakes):
     #     cls = idx // (num_samples // 10)
     #     fake = TF.to_pil_image(fake.cpu().add(1).div(2).clamp(0, 1)).save("./data/synthetic/centralized/10K/{}/{}.png".format(labels[cls],counter[cls]))
     #     counter[cls] += 1
 
+    fake_dataset = ImageFolder(root = "data/synthetic/centralized/10K", transform=ToTensor())
+
 
     # # Evaluate FID
     real_num = len(testset)
-    subset = torch.utils.data.Subset(testset, random.sample(range(real_num), min(total_samples, real_num)))
-    real_loader = torch.utils.data.DataLoader(subset, batch_size=100)
-    fake_dataset = torch.utils.data.TensorDataset(fakes, fakes_classes)
+    # subset = torch.utils.data.Subset(testset, random.sample(range(real_num), min(total_samples, real_num)))
+    real_loader = torch.utils.data.DataLoader(testset, batch_size=100)
+    # fake_dataset = torch.utils.data.TensorDataset(fakes, fakes_classes)
     fake_loader = torch.utils.data.DataLoader(fake_dataset, batch_size=100)
     print("Computing FID")
     fid = FIDScorer().calculate_fid(real_loader, fake_loader, device=device)
@@ -336,7 +340,7 @@ if __name__ == "__main__":
             num_workers=num_workers, device=model_device)
         manifold_path = os.path.join(precomputed_dir, f"pr_manifold_{dataset}.pt")
         if not os.path.exists(manifold_path):
-            manifold_builder = _ManifoldBuilder(data=subset)
+            manifold_builder = _ManifoldBuilder(data=testset)
             manifold_builder.save(manifold_path)
             true_manifold = deepcopy(manifold_builder.manifold)
             del manifold_builder
