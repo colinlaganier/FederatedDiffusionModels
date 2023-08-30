@@ -31,7 +31,7 @@ def balanced_split(dataset, num_splits, client_id):
 
     return Subset(dataset, subset_indices[int(client_id)])
 
-def dirichlet_split(dataset, num_splits, client_id, beta=0.5):
+def dirichlet_split(dataset, num_splits, client_id, beta=0.1):
     """
     Splits training data into client datasets based Dirichlet distribution
 
@@ -91,8 +91,17 @@ def load_data(dataset, client_id, path=None):
     
     if dataset == "cinic10":
         transform = Compose([ToTensor(), Normalize(mean, std)])
-        trainset = ImageFolder(path + "/train/client_" + str(client_id), transform=transform)
+        if client_id:
+            trainset = ImageFolder(path + "/train", transform=transform)
+            trainset = dirichlet_split(trainset, 5, client_id)
+            # trainset = ImageFolder(path + "/train/client_" + str(client_id), transform=transform)
+        else:
+            trainset = None
+
         testset = ImageFolder(path + "/test", transform=transform)
+        # reduce to 5000 images
+        testset = balanced_split(testset, 18, 0)
+
     else: 
         transform = Compose([lambda img: TF.rotate(img, -90),
                                 lambda img: TF.hflip(img),

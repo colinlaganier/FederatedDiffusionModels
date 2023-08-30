@@ -18,7 +18,7 @@ from collections import namedtuple
 from torch.hub import get_dir, download_url_to_file
 from torch.utils.data import Subset, DataLoader
 from tqdm import tqdm
-from torchvision.transforms import Compose, Normalize, ToTensor, Resize, GrayScale
+from torchvision.transforms import Compose, Normalize, ToTensor, Resize, Grayscale
 from torchvision.datasets import EMNIST, ImageFolder
 from torchvision.transforms import functional as TF
 from model import load_model

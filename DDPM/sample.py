@@ -1,4 +1,4 @@
-from utils import test, eval_mode, sample
+from utils import sample
 from model import load_model
 import torch
 # from torchvision.utils import save_image
@@ -8,6 +8,8 @@ from torchvision import transforms
 import torchvision
 import random
 from FIDScorer import FIDScorer
+from torchvision.datasets import EMNIST
+from data_utils import balanced_split
 
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
